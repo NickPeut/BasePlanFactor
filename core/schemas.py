@@ -1,5 +1,5 @@
+from typing import List, Dict, Optional
 from pydantic import BaseModel
-from typing import List, Dict
 
 
 class AnswerRequest(BaseModel):
@@ -12,4 +12,4 @@ class DialogResponse(BaseModel):
     question: str
     tree: List[Dict]
     ose_results: List[Dict] = []
-    message: str | None = None
+    message: Optional[str] = None

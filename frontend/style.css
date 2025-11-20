@@ -1,18 +1,11 @@
-/* ======================== */
-/* ГЛОБАЛЬНЫЙ МИНИМАЛИСТИЧНЫЙ UI */
-/* ======================== */
-
 body {
     margin: 0;
     padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-
     height: 100vh;
     display: flex;
     overflow: hidden;
-
-    background: #f5f6f8;
-    color: #222;
+    background: #f2f4f7;
 }
 
 /* ======================== */
@@ -24,27 +17,18 @@ body {
     height: 100%;
     display: flex;
     flex-direction: column;
-
     background: #ffffff;
-    border-right: 1px solid #e3e3e3;
-
+    border-right: 1px solid #e0e0e0;
     box-sizing: border-box;
 }
-
-/* Заголовок чата (можно добавить позже)
-#chat-header {
-    padding: 16px;
-    font-size: 18px;
-    font-weight: 600;
-    border-bottom: 1px solid #e3e3e3;
-}
-*/
 
 #dialog-box {
     flex: 1;
     padding: 20px 18px;
     overflow-y: auto;
-    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 /* ======================== */
@@ -52,33 +36,36 @@ body {
 /* ======================== */
 
 .message {
-    max-width: 85%;
-    padding: 12px 16px;
-    margin: 6px 0;
-    border-radius: 14px;
+    display: block;
+    max-width: 75%;
+    width: fit-content;
+
+    padding: 10px 14px;
+    border-radius: 16px;
+
     font-size: 15px;
     line-height: 1.45;
-    word-wrap: break-word;
+    word-break: break-word;
     white-space: pre-wrap;
-    animation: fadeIn 0.25s ease;
+
+    animation: fadeIn 0.25s ease-out;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
 }
 
 /* Бот */
 .bot {
-    background: #eef1f5;
-    color: #2a2a2a;
     align-self: flex-start;
+    background: #eef2f6;
     border-bottom-left-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    color: #2a2a2a;
 }
 
 /* Пользователь */
 .user {
-    background: #d6ebff;
-    color: #0a2540;
     align-self: flex-end;
+    background: linear-gradient(135deg,#4a90e2,#6bb6ff);
     border-bottom-right-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    color: white;
 }
 
 /* Плавное появление сообщений */
@@ -95,65 +82,38 @@ body {
     padding: 14px;
     display: flex;
     gap: 10px;
-    border-top: 1px solid #e3e3e3;
     background: #fafafa;
-
-    box-sizing: border-box;
-    flex-shrink: 0;
+    border-top: 1px solid #e3e3e3;
 }
 
 #answer {
     flex: 1;
     font-size: 15px;
     padding: 10px 14px;
-    border: 1px solid #d0d0d0;
     border-radius: 8px;
-    outline: none;
-    transition: 0.2s;
-
-    background: #ffffff;
+    border: 1px solid #ccd2d8;
 }
 
 #answer:focus {
     border-color: #4a90e2;
-    box-shadow: 0 0 0 3px rgba(74,144,226,0.2);
+    box-shadow: 0 0 0 3px rgba(74,144,226,0.15);
 }
 
 /* Кнопка отправки */
 #send-btn {
     padding: 10px 18px;
-    font-size: 15px;
-
     border: none;
     border-radius: 8px;
-
-    background: #4a90e2;
+    background: linear-gradient(135deg,#4a90e2,#387ad1);
     color: white;
-
     cursor: pointer;
-    transition: 0.15s ease-in-out;
-    white-space: nowrap;
-}
-
-#send-btn:hover {
-    background: #3a7dd5;
-}
-
-#send-btn:active {
-    background: #2e6dbf;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }
 
 /* Адаптация для маленьких экранов */
 @media (max-width: 1200px) {
-    #send-btn {
-        font-size: 0;
-        padding: 10px;
-    }
-
-    #send-btn::after {
-        content: "📤";
-        font-size: 22px;
-    }
+    #send-btn { font-size: 0; padding: 10px; }
+    #send-btn::after { content: "📤"; font-size: 20px; }
 }
 
 /* ======================== */
@@ -170,19 +130,10 @@ body {
 .yn-btn {
     flex: 1;
     padding: 10px;
-    font-size: 15px;
-
-    border: none;
     border-radius: 8px;
-
+    background: #e6eef8;
+    border: none;
     cursor: pointer;
-    transition: 0.15s;
-
-    background: #e7eef5;
-}
-
-.yn-btn:hover {
-    background: #d9e6f2;
 }
 
 /* ======================== */
@@ -201,23 +152,17 @@ body {
 #tabs {
     height: 50px;
     display: flex;
-    border-bottom: 1px solid #e3e3e3;
     background: #ffffff;
+    border-bottom: 1px solid #e3e3e3;
 }
 
 .tab-btn {
     flex: 1;
     border: none;
-    font-size: 15px;
     background: #ffffff;
+    font-size: 15px;
     cursor: pointer;
-    transition: 0.2s;
-
     border-bottom: 3px solid transparent;
-}
-
-.tab-btn:hover {
-    background: #f3f3f3;
 }
 
 .tab-btn.active {
@@ -230,50 +175,32 @@ body {
 #graph-container,
 #ose-container {
     flex: 1;
-    overflow: hidden;
+    min-height: 0;
     display: none;
-    height: calc(100% - 50px);
+    background: #ffffff;
 }
 
-/* Граф */
 #graph {
     width: 100%;
     height: 100%;
-    background: #ffffff;
 }
 
 /* ОСЭ контейнер */
 #ose-container {
     display: flex;
     flex-direction: column;
-    background: #ffffff;
 }
 
-/* Легенда */
-#factor-legend {
-    padding: 14px;
-    border-bottom: 1px solid #e3e3e3;
-    max-height: 40%;
-    overflow-y: auto;
-}
+#factor-legend { padding: 14px; border-bottom: 1px solid #e3e3e3; }
+#ose-results { padding: 14px; overflow-y: auto; }
 
-/* Результаты */
-#ose-results {
-    padding: 14px;
-    overflow-y: auto;
-}
+/* ======================== */
+/* DRAGBAR */
+/* ======================== */
 
-/* Легенда */
-.factor-item {
-    display: flex;
-    align-items: center;
-    margin-bottom: 6px;
-}
-
-.factor-color {
-    width: 14px;
-    height: 14px;
-    border-radius: 3px;
-    margin: 0 6px;
-    border: 1px solid #555;
+#dragbar {
+    width: 5px;
+    background: #d0d4d9;
+    cursor: col-resize;
+    flex-shrink: 0;
 }

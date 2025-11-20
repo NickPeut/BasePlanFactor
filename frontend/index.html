@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>АДПАЦФ / АДП ОСЭ</title>
+    <title>PlanFactor — Диалог</title>
 
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
@@ -10,7 +10,7 @@
 
 <body>
 
-<!-- ЧАТ -->
+<!-- ЛЕВАЯ ПАНЕЛЬ — ЧАТ -->
 <div id="chat">
     <div id="dialog-box"></div>
 
@@ -20,40 +20,33 @@
     </div>
 
     <div id="input-area">
-        <input id="answer" placeholder="Введите ответ...">
+        <input id="answer" placeholder="Введите ответ..." />
         <button id="send-btn">Отправить</button>
     </div>
 </div>
 
+<!-- ПЕРЕТАСКИВАЕМЫЙ РАЗДЕЛИТЕЛЬ -->
+<div id="dragbar"></div>
+
 <!-- ПРАВАЯ ПАНЕЛЬ -->
 <div id="right-panel">
 
-    <!-- Кнопки-вкладки -->
     <div id="tabs">
         <button class="tab-btn active" id="tab-graph">Граф дерева</button>
         <button class="tab-btn" id="tab-ose">Результаты ОСЭ</button>
     </div>
 
-    <!-- ГРАФ -->
     <div id="graph-container" style="display:block;">
         <div id="graph"></div>
     </div>
 
-    <!-- РЕЗУЛЬТАТЫ ОСЭ + ЛЕГЕНДА ФАКТОРОВ -->
     <div id="ose-container">
-        <div id="factor-legend">
-            <h3>Факторы для отображения на графе:</h3>
-            <!-- чекбоксы с цветами создаём из JS -->
-        </div>
-        <div id="ose-results">
-            <h3>Результаты ОСЭ:</h3>
-            <!-- сюда пишем список H -->
-        </div>
+        <div id="factor-legend"></div>
+        <div id="ose-results"></div>
     </div>
 
 </div>
 
 <script src="script.js"></script>
-
 </body>
 </html>
