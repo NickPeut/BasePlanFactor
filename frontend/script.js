@@ -5,12 +5,12 @@ let cy = null;
 // =======================================
 
 async function apiStart() {
-    const res = await fetch("http://localhost:8000/dialog/start", { method: "POST" });
+    const res = await fetch("/dialog/start", { method: "POST" });
     return await res.json();
 }
 
 async function apiAnswer(text) {
-    const res = await fetch("http://localhost:8000/dialog/answer", {
+    const res = await fetch("/dialog/answer", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({answer: text})
@@ -32,23 +32,17 @@ function initGraph() {
                 style: {
                     "background-color": "#4a90e2",
                     "color": "#fff",
-
-                    // теперь label — многострочный
                     "label": "data(label)",
-
                     "font-size": "12px",
                     "text-wrap": "wrap",
                     "text-max-width": "150px",
                     "text-valign": "center",
                     "text-halign": "center",
-
                     "shape": "round-rectangle",
                     "border-radius": "22px",
-
                     "width": "label",
                     "height": "label",
                     "padding": "10px",
-
                     "min-width": "60px",
                     "max-width": "200px",
                 }
@@ -99,12 +93,12 @@ function updateGraph(tree) {
     setTimeout(() => {
         cy.resize();
         cy.fit();
-        updateNodeLabels();  // <- теперь обновляем подписи тоже
+        updateNodeLabels();
     }, 100);
 }
 
 // =======================================
-// ОСЭ обработка
+// ОСЭ
 // =======================================
 
 let oseResults = [];
@@ -188,7 +182,7 @@ function renderOseList(results) {
 }
 
 // =======================================
-// 🔵 Новый функционал — подписи значений H под нодами
+// Подписи значений H
 // =======================================
 
 function updateNodeLabels() {
@@ -198,14 +192,12 @@ function updateNodeLabels() {
         const goal = node.data("label");
         const vals = oseByGoal[goal] || {};
 
-        // первая строка — название цели
         let lines = [goal];
 
-        // выбранные факторы → такие же, как галочки
         activeFactors.forEach(f => {
             if (vals[f] !== undefined) {
                 const H = vals[f];
-                lines.push(HLine(f, H));
+                lines.push(`${f}: ${H}`);
             }
         });
 
@@ -213,12 +205,6 @@ function updateNodeLabels() {
         node.style("text-wrap", "wrap");
         node.style("text-max-width", "160px");
     });
-}
-
-// окрашиваем факторы текстом
-function HLine(factorName, Hval) {
-    let color = factorColors[factorName] || "#000000";
-    return `%c${factorName}: ${Hval}`;
 }
 
 // =======================================
@@ -328,7 +314,7 @@ document.addEventListener("mouseup", () => {
 });
 
 // =======================================
-// ИНИЦИАЛИЗАЦИЯ
+// АВТОЗАПУСК ДИАЛОГА
 // =======================================
 
 window.onload = async () => {
