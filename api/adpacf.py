@@ -1,6 +1,6 @@
 from core.dialog_state import dialog
 from core.schemas import DialogResponse
-from models.goal import GoalNode, serialize_tree, collect_goals
+from db.goal import GoalNode, serialize_tree, collect_goals
 
 
 def handle_adpacf(ans: str) -> DialogResponse:

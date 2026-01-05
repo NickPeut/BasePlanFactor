@@ -1,5 +1,20 @@
 from typing import Optional, List, Dict
 
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.orm import relationship, declarative_base
+
+Base = declarative_base()
+
+
+class Goal(Base):
+    __tablename__ = "goals"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+
+    parent_id = Column(Integer, ForeignKey("goals.id"), nullable=True)
+    children = relationship("Goal")
+
 
 class GoalNode:
     _id_counter = 1
@@ -20,7 +35,6 @@ class GoalNode:
 
 
 def serialize_tree(node: GoalNode) -> List[Dict]:
-    """Плоский список вершин дерева для фронтенда."""
     data = [{
         "id": node.id,
         "name": node.name,
@@ -33,7 +47,6 @@ def serialize_tree(node: GoalNode) -> List[Dict]:
 
 
 def collect_goals(node: GoalNode) -> List[GoalNode]:
-    """Собираем все цели в один список (для обхода в ОСЭ)."""
     items = [node]
     for ch in node.children:
         items.extend(collect_goals(ch))

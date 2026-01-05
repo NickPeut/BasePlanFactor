@@ -1,7 +1,7 @@
 import math
 from core.dialog_state import dialog
 from core.schemas import DialogResponse
-from models.goal import serialize_tree
+from db.goal import serialize_tree
 
 
 def handle_adpose(ans: str) -> DialogResponse:

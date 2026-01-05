@@ -1,4 +1,4 @@
-from models.goal import GoalNode
+from db.goal import GoalNode
 
 
 class DialogState:

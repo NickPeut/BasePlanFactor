@@ -1,10 +1,8 @@
 import re
-from typing import Optional
 
 from core.dialog_state import dialog
 from core.schemas import DialogResponse
-from models.goal import serialize_tree, collect_goals, GoalNode
-
+from db.goal import GoalNode, collect_goals, serialize_tree
 
 # Список состояний, которые относятся к "мастерам" редактирования/добавления
 EDIT_FLOW_STATES = {

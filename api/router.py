@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from core.dialog_state import dialog
 from core.schemas import AnswerRequest, DialogResponse
-from models.goal import serialize_tree
+from db.goal import serialize_tree
 from api.adpacf import handle_adpacf
 from api.adpose import handle_adpose
 from api.edit_commands import (
