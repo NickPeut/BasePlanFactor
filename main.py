@@ -21,31 +21,49 @@ PASSWORD = os.getenv("AUTH_PASS")
 if USERNAME is None or PASSWORD is None:
     raise RuntimeError("AUTH_USER и AUTH_PASS не установлены.")
 
+
 @app.middleware("http")
 async def basic_auth_middleware(request: Request, call_next):
     if request.method == "HEAD":
         return await call_next(request)
+
     if request.url.path.startswith("/static"):
         return await call_next(request)
 
     auth_header = request.headers.get("Authorization")
     if not auth_header:
-        return Response(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"})
+        return Response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            headers={"WWW-Authenticate": "Basic"},
+        )
 
     scheme, _, encoded = auth_header.partition(" ")
     if scheme.lower() != "basic":
-        return Response(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"})
+        return Response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            headers={"WWW-Authenticate": "Basic"},
+        )
 
     try:
         decoded = base64.b64decode(encoded).decode("utf-8")
         username, _, password = decoded.partition(":")
     except Exception:
-        return Response(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"})
+        return Response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            headers={"WWW-Authenticate": "Basic"},
+        )
 
-    if not (secrets.compare_digest(username, USERNAME) and secrets.compare_digest(password, PASSWORD)):
-        return Response(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"})
+    if not (
+        secrets.compare_digest(username, USERNAME)
+        and secrets.compare_digest(password, PASSWORD)
+    ):
+        return Response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            headers={"WWW-Authenticate": "Basic"},
+        )
 
     return await call_next(request)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -58,6 +76,7 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 app.include_router(router)
+
 
 @app.get("/")
 def serve_frontend():

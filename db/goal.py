@@ -5,16 +5,18 @@ from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
 
-
 class Goal(Base):
     __tablename__ = "goals"
 
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
 
+    scheme_id = Column(Integer, ForeignKey("schemes.id"), nullable=False)
+
     parent_id = Column(Integer, ForeignKey("goals.id"), nullable=True)
     children = relationship("Goal")
 
+    scheme = relationship("Scheme", back_populates="goals")
 
 class GoalNode:
     _id_counter = 1

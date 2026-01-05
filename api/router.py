@@ -1,13 +1,14 @@
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from core.dialog_state import dialog
 from core.schemas import AnswerRequest, DialogResponse
 
 from db.session import SessionLocal
-from db.goals import get_all_goals
 from db.goal import GoalNode, serialize_tree
+from db.goals import get_all_goals
+from db.schemes import list_schemes, create_scheme, delete_scheme
 
 from api.adpacf import handle_adpacf
 from api.adpose import handle_adpose
@@ -21,10 +22,29 @@ from api.edit_commands import (
 router = APIRouter()
 
 
-def _load_tree_from_db() -> Optional[GoalNode]:
+def _ensure_active_scheme_id() -> int:
+    if not hasattr(dialog, "active_scheme_id"):
+        dialog.active_scheme_id = None
+
     session = SessionLocal()
     try:
-        goals = get_all_goals(session)
+        schemes = list_schemes(session)
+        if not schemes:
+            s = create_scheme(session, "Default")
+            schemes = [s]
+
+        if dialog.active_scheme_id is None:
+            dialog.active_scheme_id = schemes[0].id
+
+        return dialog.active_scheme_id
+    finally:
+        session.close()
+
+
+def _load_tree_from_db(scheme_id: int) -> Optional[GoalNode]:
+    session = SessionLocal()
+    try:
+        goals = get_all_goals(session, scheme_id)
         if not goals:
             return None
 
@@ -47,18 +67,65 @@ def _load_tree_from_db() -> Optional[GoalNode]:
     finally:
         session.close()
 
+@router.get("/schemes")
+def get_schemes():
+    session = SessionLocal()
+    try:
+        items = list_schemes(session)
+        return [{"id": s.id, "name": s.name} for s in items]
+    finally:
+        session.close()
+
+@router.post("/schemes")
+def post_scheme(name: str = Query(..., min_length=1)):
+    session = SessionLocal()
+    try:
+        s = create_scheme(session, name)
+        if not hasattr(dialog, "active_scheme_id"):
+            dialog.active_scheme_id = None
+        dialog.active_scheme_id = s.id
+        return {"id": s.id, "name": s.name}
+    finally:
+        session.close()
+
+@router.delete("/schemes/{scheme_id}")
+def delete_scheme_route(scheme_id: int):
+    session = SessionLocal()
+    try:
+        delete_scheme(session, scheme_id)
+
+        if hasattr(dialog, "active_scheme_id") and dialog.active_scheme_id == scheme_id:
+            dialog.active_scheme_id = None
+            _ensure_active_scheme_id()
+
+        return {"ok": True}
+    finally:
+        session.close()
+
+@router.get("/schemes/{scheme_id}/goals")
+def get_scheme_goals(scheme_id: int):
+    root = _load_tree_from_db(scheme_id)
+    return serialize_tree(root) if root else []
 
 @router.get("/goals")
 def get_goals():
-    root = _load_tree_from_db()
+    scheme_id = _ensure_active_scheme_id()
+    root = _load_tree_from_db(scheme_id)
     return serialize_tree(root) if root else []
 
-
 @router.post("/dialog/start", response_model=DialogResponse)
-def start_dialog():
+def start_dialog(scheme_id: Optional[int] = Query(None)):
     dialog.__init__()
 
-    root = _load_tree_from_db()
+    if not hasattr(dialog, "active_scheme_id"):
+        dialog.active_scheme_id = None
+
+    if scheme_id is not None:
+        dialog.active_scheme_id = scheme_id
+    else:
+        _ensure_active_scheme_id()
+
+    root = _load_tree_from_db(dialog.active_scheme_id)
     if root:
         dialog.root = root
         dialog.phase = "adpacf"
@@ -67,7 +134,7 @@ def start_dialog():
         return DialogResponse(
             phase=dialog.phase,
             state=dialog.state,
-            question="Дерево целей загружено из БД. Можешь продолжать добавлять/редактировать цели.",
+            question="Схема загружена из БД. Можешь продолжать добавлять/редактировать цели.",
             tree=serialize_tree(dialog.root),
             ose_results=dialog.factors_results,
         )
