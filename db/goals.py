@@ -8,3 +8,7 @@ def get_root_goal(session: Session) -> Goal | None:
 
 def get_goal_by_id(session: Session, goal_id: int) -> Goal | None:
     return session.query(Goal).filter(Goal.id == goal_id).first()
+
+
+def get_all_goals(session: Session) -> list[Goal]:
+    return session.query(Goal).all()
