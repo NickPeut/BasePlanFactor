@@ -15,15 +15,20 @@ app = FastAPI(
     version="1.0.0",
 )
 
+AUTH_ENABLED = os.getenv("AUTH_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
+
 USERNAME = os.getenv("AUTH_USER")
 PASSWORD = os.getenv("AUTH_PASS")
 
-if USERNAME is None or PASSWORD is None:
+if AUTH_ENABLED and (USERNAME is None or PASSWORD is None):
     raise RuntimeError("AUTH_USER и AUTH_PASS не установлены.")
 
 
 @app.middleware("http")
 async def basic_auth_middleware(request: Request, call_next):
+    if not AUTH_ENABLED:
+        return await call_next(request)
+
     if request.method == "HEAD":
         return await call_next(request)
 
@@ -54,8 +59,8 @@ async def basic_auth_middleware(request: Request, call_next):
         )
 
     if not (
-        secrets.compare_digest(username, USERNAME)
-        and secrets.compare_digest(password, PASSWORD)
+        secrets.compare_digest(username, USERNAME or "")
+        and secrets.compare_digest(password, PASSWORD or "")
     ):
         return Response(
             status_code=status.HTTP_401_UNAUTHORIZED,
