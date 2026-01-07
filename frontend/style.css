@@ -8,10 +8,6 @@ body {
     background: #f2f4f7;
 }
 
-/* ======================== */
-/* ЛЕВАЯ ПАНЕЛЬ — ЧАТ */
-/* ======================== */
-
 #chat {
     width: 35%;
     height: 100%;
@@ -31,28 +27,20 @@ body {
     gap: 8px;
 }
 
-/* ======================== */
-/* СООБЩЕНИЯ */
-/* ======================== */
-
 .message {
     display: block;
     max-width: 75%;
     width: fit-content;
-
     padding: 10px 14px;
     border-radius: 16px;
-
     font-size: 15px;
     line-height: 1.45;
     word-break: break-word;
     white-space: pre-wrap;
-
     animation: fadeIn 0.25s ease-out;
     box-shadow: 0 2px 6px rgba(0,0,0,0.06);
 }
 
-/* Бот */
 .bot {
     align-self: flex-start;
     background: #eef2f6;
@@ -60,23 +48,17 @@ body {
     color: #2a2a2a;
 }
 
-/* Пользователь */
 .user {
     align-self: flex-end;
     background: linear-gradient(135deg,#4a90e2,#6bb6ff);
     border-bottom-right-radius: 4px;
-    color: white;
+    color: #ffffff;
 }
 
-/* Плавное появление сообщений */
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(4px); }
-    to   { opacity: 1; transform: translateY(0); }
+    to { opacity: 1; transform: translateY(0); }
 }
-
-/* ======================== */
-/* БЛОК ВВОДА */
-/* ======================== */
 
 #input-area {
     padding: 14px;
@@ -95,30 +77,25 @@ body {
 }
 
 #answer:focus {
-    border-color: #4a90e2;
-    box-shadow: 0 0 0 3px rgba(74,144,226,0.15);
+    border-color: #9aa3ad;
+    box-shadow: 0 0 0 3px rgba(0,0,0,0.08);
+    outline: none;
 }
 
-/* Кнопка отправки */
 #send-btn {
     padding: 10px 18px;
     border: none;
     border-radius: 8px;
-    background: linear-gradient(135deg,#4a90e2,#387ad1);
-    color: white;
+    background: #e3e6ea;
+    color: #2a2a2a;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
 }
 
-/* Адаптация для маленьких экранов */
 @media (max-width: 1200px) {
     #send-btn { font-size: 0; padding: 10px; }
     #send-btn::after { content: "📤"; font-size: 20px; }
 }
-
-/* ======================== */
-/* КНОПКИ ДА/НЕТ */
-/* ======================== */
 
 #yn-buttons {
     display: flex;
@@ -131,14 +108,10 @@ body {
     flex: 1;
     padding: 10px;
     border-radius: 8px;
-    background: #e6eef8;
+    background: #e6e9ee;
     border: none;
     cursor: pointer;
 }
-
-/* ======================== */
-/* ПРАВАЯ ПАНЕЛЬ */
-/* ======================== */
 
 #right-panel {
     width: 65%;
@@ -148,7 +121,6 @@ body {
     overflow: hidden;
 }
 
-/* Вкладки */
 #tabs {
     height: 50px;
     display: flex;
@@ -168,10 +140,9 @@ body {
 .tab-btn.active {
     font-weight: 600;
     background: #f7f7f7;
-    border-bottom: 3px solid #4a90e2;
+    border-bottom: 3px solid #9aa3ad;
 }
 
-/* Контейнеры контента */
 #graph-container,
 #ose-container {
     flex: 1;
@@ -185,18 +156,20 @@ body {
     height: 100%;
 }
 
-/* ОСЭ контейнер */
 #ose-container {
     display: flex;
     flex-direction: column;
 }
 
-#factor-legend { padding: 14px; border-bottom: 1px solid #e3e3e3; }
-#ose-results { padding: 14px; overflow-y: auto; }
+#factor-legend {
+    padding: 14px;
+    border-bottom: 1px solid #e3e3e3;
+}
 
-/* ======================== */
-/* DRAGBAR */
-/* ======================== */
+#ose-results {
+    padding: 14px;
+    overflow-y: auto;
+}
 
 #dragbar {
     width: 5px;
@@ -204,6 +177,76 @@ body {
     cursor: col-resize;
     flex-shrink: 0;
 }
-#schemes-panel { padding: 10px; }
-#scheme-create-row { display: flex; gap: 8px; margin-top: 8px; }
-#scheme-name { flex: 1; }
+
+#schemes-panel {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#scheme-create-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+#scheme-name {
+    flex: 1;
+}
+
+#schemes-panel .scheme-row,
+#schemes-panel .scheme-item {
+    display: flex;
+}
+
+#schemes-panel .scheme-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 16px;
+    border: none;
+    background: #eef2f6;
+    color: #2a2a2a;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.45;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+#schemes-panel .scheme-btn:hover {
+    background: #e6ebf1;
+}
+
+#schemes-panel .scheme-btn.active {
+    background: #e1e6ec;
+}
+
+#schemes-panel .scheme-btn .delete-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    border: none;
+    background: #d7dce2;
+    color: #2a2a2a;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+#schemes-panel .scheme-btn .delete-btn:hover {
+    background: #cfd4da;
+}
+
+#scheme-create-row button {
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: none;
+    background: #e6e9ee;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}

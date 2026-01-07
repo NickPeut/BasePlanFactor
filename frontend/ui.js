@@ -163,20 +163,29 @@ async function renderSchemes() {
     box.innerHTML = "";
 
     const schemes = await apiGetSchemes();
+    const activeId = getSavedSchemeId();
 
     schemes.forEach(s => {
         const row = document.createElement("div");
+        row.className = "scheme-row";
 
         const nameBtn = document.createElement("button");
+        nameBtn.className = "scheme-select";
         nameBtn.textContent = s.name;
+        if (Number(s.id) === Number(activeId)) nameBtn.classList.add("active");
         nameBtn.onclick = () => startForScheme(s.id);
 
         const delBtn = document.createElement("button");
+        delBtn.className = "scheme-delete";
+        delBtn.type = "button";
         delBtn.textContent = "🗑";
         delBtn.onclick = async e => {
+            e.preventDefault();
             e.stopPropagation();
             await apiDeleteScheme(s.id);
             await renderSchemes();
+            const savedAfter = getSavedSchemeId();
+            if (Number(savedAfter) === Number(s.id)) setActiveSchemeId(null);
         };
 
         row.appendChild(nameBtn);
