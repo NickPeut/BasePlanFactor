@@ -116,7 +116,7 @@ def get_goals():
     root = _load_tree_from_db(scheme_id)
     return serialize_tree(root) if root else []
 
-@router.post("/api/dialog/start", response_model=DialogResponse)
+@router.post("/dialog/start", response_model=DialogResponse)
 def start_dialog(scheme_id: Optional[int] = Query(None)):
     dialog.__init__()
 
@@ -151,7 +151,7 @@ def start_dialog(scheme_id: Optional[int] = Query(None)):
     )
 
 
-@router.post("/api/dialog/answer", response_model=DialogResponse)
+@router.post("/dialog/answer", response_model=DialogResponse)
 def process_answer(req: AnswerRequest):
     text = req.answer.strip()
 
