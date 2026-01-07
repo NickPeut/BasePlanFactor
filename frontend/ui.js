@@ -18,19 +18,19 @@ export function getSavedSchemeId() {
 }
 
 export async function apiGetSchemes() {
-    const res = await fetch("/schemes");
+    const res = await fetch("/api/schemes");
     return await res.json();
 }
 
 export async function apiCreateScheme(name) {
-    const res = await fetch(`/schemes?name=${encodeURIComponent(name)}`, {
+    const res = await fetch(`/api/schemes?name=${encodeURIComponent(name)}`, {
         method: "POST"
     });
     return await res.json();
 }
 
 export async function apiDeleteScheme(id) {
-    const res = await fetch(`/schemes/${id}`, {
+    const res = await fetch(`/api/schemes/${id}`, {
         method: "DELETE"
     });
     return await res.json();
@@ -46,7 +46,7 @@ export async function apiStart(schemeId = null) {
 }
 
 export async function apiAnswer(text) {
-    const res = await fetch("/dialog/answer", {
+    const res = await fetch("/api/dialog/answer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answer: text })

@@ -1,7 +1,7 @@
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 
-from fastapi import APIRouter, Query
-
+from fastapi import APIRouter, Query, Depends
+from core.auth import require_auth
 from core.dialog_state import dialog
 from core.schemas import AnswerRequest, DialogResponse
 
@@ -19,7 +19,8 @@ from api.edit_commands import (
     EDIT_FLOW_STATES,
 )
 
-router = APIRouter()
+
+router = APIRouter(prefix="/api", dependencies=[Depends(require_auth)])
 
 
 def _ensure_active_scheme_id() -> int:
@@ -59,7 +60,9 @@ def _load_tree_from_db(scheme_id: int) -> Optional[GoalNode]:
             if g.parent_id is None:
                 root = nodes[g.id]
             else:
-                nodes[g.parent_id].children.append(nodes[g.id])
+                parent = nodes.get(g.parent_id)
+                if parent:
+                    parent.children.append(nodes[g.id])
 
         GoalNode._id_counter = (max(nodes.keys()) + 1) if nodes else 1
 
@@ -94,7 +97,7 @@ def delete_scheme_route(scheme_id: int):
     try:
         delete_scheme(session, scheme_id)
 
-        if hasattr(dialog, "active_scheme_id") and dialog.active_scheme_id == scheme_id:
+        if getattr(dialog, "active_scheme_id", None) == scheme_id:
             dialog.active_scheme_id = None
             _ensure_active_scheme_id()
 
