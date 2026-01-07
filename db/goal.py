@@ -1,9 +1,10 @@
 from typing import Optional, List, Dict
 
 from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.orm import relationship
 
-Base = declarative_base()
+from db.base import Base
+
 
 class Goal(Base):
     __tablename__ = "goals"
@@ -14,14 +15,33 @@ class Goal(Base):
     scheme_id = Column(Integer, ForeignKey("schemes.id"), nullable=False)
 
     parent_id = Column(Integer, ForeignKey("goals.id"), nullable=True)
-    children = relationship("Goal")
 
-    scheme = relationship("Scheme", back_populates="goals")
+    parent = relationship(
+        "Goal",
+        remote_side=[id],
+        back_populates="children",
+    )
+    children = relationship(
+        "Goal",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+    )
+
+    scheme = relationship(
+        "Scheme",
+        back_populates="goals",
+    )
+
 
 class GoalNode:
     _id_counter = 1
 
-    def __init__(self, name: str, level: int = 1, parent: Optional["GoalNode"] = None):
+    def __init__(
+        self,
+        name: str,
+        level: int = 1,
+        parent: Optional["GoalNode"] = None,
+    ):
         self.id = GoalNode._id_counter
         GoalNode._id_counter += 1
 
@@ -31,7 +51,11 @@ class GoalNode:
         self.children: List["GoalNode"] = []
 
     def add_child(self, name: str) -> "GoalNode":
-        child = GoalNode(name=name, level=self.level + 1, parent=self)
+        child = GoalNode(
+            name=name,
+            level=self.level + 1,
+            parent=self,
+        )
         self.children.append(child)
         return child
 

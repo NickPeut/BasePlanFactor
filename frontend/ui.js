@@ -191,56 +191,91 @@ async function wireSchemeCreate() {
     const btn = document.getElementById("scheme-create");
     const input = document.getElementById("scheme-name");
 
+    if (!btn || !input) return;
+
     btn.onclick = async () => {
         const name = input.value.trim();
         if (!name) return;
-        const created = await apiCreateScheme(name);
-        input.value = "";
-        await renderSchemes();
-        await startForScheme(created.id);
+
+        btn.disabled = true;
+        input.disabled = true;
+
+        try {
+            const created = await apiCreateScheme(name);
+            input.value = "";
+            await renderSchemes();
+            await startForScheme(created.id);
+        } catch (e) {
+            console.error(e);
+            addMessage("Ошибка при создании схемы. Смотри Console.", "bot");
+        } finally {
+            btn.disabled = false;
+            input.disabled = false;
+        }
     };
 }
 
-window.onload = async () => {
-    initGraph();
+window.addEventListener("DOMContentLoaded", () => {
+    (async () => {
+        try {
+            initGraph();
 
-    await wireSchemeCreate();
+            await wireSchemeCreate();
 
-    const saved = getSavedSchemeId();
-    const schemes = await renderSchemes();
+            const saved = getSavedSchemeId();
+            const schemes = await renderSchemes();
 
-    if (schemes.length > 0) {
-        const first = schemes.find(s => s.id === saved) || schemes[0];
-        await startForScheme(first.id);
-    }
+            if (schemes.length > 0) {
+                const first = schemes.find(s => s.id === saved) || schemes[0];
+                await startForScheme(first.id);
+            }
 
-    document.getElementById("btn-yes").onclick = () => {
-        addMessage("Да", "user");
-        sendAnswer("да");
-    };
+            const yesBtn = document.getElementById("btn-yes");
+            if (yesBtn) {
+                yesBtn.onclick = () => {
+                    addMessage("Да", "user");
+                    sendAnswer("да");
+                };
+            }
 
-    document.getElementById("btn-no").onclick = () => {
-        addMessage("Нет", "user");
-        sendAnswer("нет");
-    };
+            const noBtn = document.getElementById("btn-no");
+            if (noBtn) {
+                noBtn.onclick = () => {
+                    addMessage("Нет", "user");
+                    sendAnswer("нет");
+                };
+            }
 
-    document.getElementById("send-btn").onclick = () => {
-        const i = document.getElementById("answer");
-        if (!i.value.trim()) return;
-        addMessage(i.value, "user");
-        sendAnswer(i.value);
-        i.value = "";
-    };
+            const sendBtn = document.getElementById("send-btn");
+            if (sendBtn) {
+                sendBtn.onclick = () => {
+                    const i = document.getElementById("answer");
+                    if (!i || !i.value.trim()) return;
+                    addMessage(i.value, "user");
+                    sendAnswer(i.value);
+                    i.value = "";
+                };
+            }
 
-    document.getElementById("answer").addEventListener("keypress", e => {
-        if (e.key === "Enter") {
-            if (!e.target.value.trim()) return;
-            addMessage(e.target.value, "user");
-            sendAnswer(e.target.value);
-            e.target.value = "";
+            const answerInput = document.getElementById("answer");
+            if (answerInput) {
+                answerInput.addEventListener("keypress", e => {
+                    if (e.key === "Enter") {
+                        if (!e.target.value.trim()) return;
+                        addMessage(e.target.value, "user");
+                        sendAnswer(e.target.value);
+                        e.target.value = "";
+                    }
+                });
+            }
+
+            const tabGraph = document.getElementById("tab-graph");
+            if (tabGraph) tabGraph.onclick = () => resizeGraph();
+
+            const tabOse = document.getElementById("tab-ose");
+            if (tabOse) tabOse.onclick = () => {};
+        } catch (e) {
+            console.error("UI bootstrap failed:", e);
         }
-    });
-
-    document.getElementById("tab-graph").onclick = () => resizeGraph();
-    document.getElementById("tab-ose").onclick = () => {};
-};
+    })();
+});

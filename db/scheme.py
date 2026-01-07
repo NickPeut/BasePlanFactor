@@ -1,7 +1,8 @@
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
 
-from db.goal import Base
+from db.base import Base
+
 
 class Scheme(Base):
     __tablename__ = "schemes"
@@ -9,4 +10,8 @@ class Scheme(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
 
-    goals = relationship("Goal", back_populates="scheme", cascade="all, delete-orphan")
+    goals = relationship(
+        "Goal",
+        back_populates="scheme",
+        cascade="all, delete-orphan",
+    )

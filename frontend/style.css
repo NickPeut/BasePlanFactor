@@ -204,3 +204,6 @@ body {
     cursor: col-resize;
     flex-shrink: 0;
 }
+#schemes-panel { padding: 10px; }
+#scheme-create-row { display: flex; gap: 8px; margin-top: 8px; }
+#scheme-name { flex: 1; }
