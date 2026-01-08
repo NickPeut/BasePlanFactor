@@ -8,7 +8,15 @@ import {
 
 import {
     setActiveSchemeId,
-    getSavedSchemeId
+    getSavedSchemeId,
+    getActiveSchemeId,
+    loadDialogHistory,
+    saveDialogHistory,
+    clearDialogHistory,
+    setDialogActive,
+    saveSchemeState,
+    loadSchemeState,
+    clearSchemeState
 } from "./state.js";
 
 import {
@@ -20,13 +28,9 @@ import {
     updateNodeLabels
 } from "./graph.js";
 
-let oseResults = [];
-let factors = [];
-let factorColors = {};
-let oseByGoal = {};
-let activeFactors = new Set();
+let dialogHistory = [];
 
-function addMessage(text, sender) {
+function renderMessage(text, sender) {
     const box = document.getElementById("dialog-box");
     const msg = document.createElement("div");
     msg.className = "message " + sender;
@@ -35,9 +39,39 @@ function addMessage(text, sender) {
     box.scrollTop = box.scrollHeight;
 }
 
+let oseResults = [];
+let factors = [];
+let factorColors = {};
+let oseByGoal = {};
+let activeFactors = new Set();
+
+function addMessage(text, sender) {
+    renderMessage(text, sender);
+    dialogHistory.push({ text, sender });
+    saveDialogHistory(getActiveSchemeId(), dialogHistory);
+    setDialogActive(getActiveSchemeId(), true);
+}
+
 function clearDialog() {
     const box = document.getElementById("dialog-box");
     box.innerHTML = "";
+    dialogHistory = [];
+    clearDialogHistory(getActiveSchemeId());
+    clearSchemeState(getActiveSchemeId());
+}
+
+function clearOseUi() {
+    oseResults = [];
+    factors = [];
+    factorColors = {};
+    oseByGoal = {};
+    activeFactors = new Set();
+
+    const legend = document.getElementById("factor-legend");
+    if (legend) legend.innerHTML = "";
+
+    const list = document.getElementById("ose-results");
+    if (list) list.innerHTML = "";
 }
 
 function buildOse(results) {
@@ -112,8 +146,29 @@ function isYesNo(text) {
     return text.includes("(да/нет)");
 }
 
-async function sendAnswer(text) {
-    const data = await apiAnswer(text);
+function applySavedState(schemeId) {
+    const st = loadSchemeState(schemeId);
+    if (!st) return;
+
+    if (st.tree) updateGraph(st.tree);
+
+    if (st.ose_results) {
+        buildOse(st.ose_results);
+        renderFactorLegend();
+        renderOseList(st.ose_results);
+        updateNodeLabels();
+    }
+}
+
+function persistStatePatch(schemeId, data) {
+    const prev = loadSchemeState(schemeId) || {};
+    saveSchemeState(schemeId, {
+        tree: data.tree || prev.tree || null,
+        ose_results: data.ose_results || prev.ose_results || null
+    });
+}
+
+function applyDialogResponse(data) {
     addMessage(data.question, "bot");
 
     if (data.tree) updateGraph(data.tree);
@@ -138,24 +193,35 @@ async function sendAnswer(text) {
         input.disabled = false;
         send.disabled = false;
     }
+
+    persistStatePatch(getActiveSchemeId(), data);
+}
+
+async function sendAnswer(text) {
+    const data = await apiAnswer(text);
+    applyDialogResponse(data);
 }
 
 async function startForScheme(schemeId) {
     setActiveSchemeId(schemeId);
-    clearDialog();
     clearGraph();
+    clearOseUi();
 
-    const data = await apiStart(schemeId);
-    addMessage(data.question, "bot");
+    const saved = loadDialogHistory(schemeId);
 
-    if (data.tree) updateGraph(data.tree);
-
-    if (data.ose_results) {
-        buildOse(data.ose_results);
-        renderFactorLegend();
-        renderOseList(data.ose_results);
-        updateNodeLabels();
+    if (saved && saved.length) {
+        const box = document.getElementById("dialog-box");
+        box.innerHTML = "";
+        dialogHistory = saved;
+        for (const m of saved) renderMessage(m.text, m.sender);
+        setDialogActive(schemeId, true);
+        applySavedState(schemeId);
+        return;
     }
+
+    clearDialog();
+    const data = await apiStart(schemeId);
+    applyDialogResponse(data);
 }
 
 async function renderSchemes() {
@@ -183,6 +249,8 @@ async function renderSchemes() {
             e.preventDefault();
             e.stopPropagation();
             await apiDeleteScheme(s.id);
+            clearDialogHistory(s.id);
+            clearSchemeState(s.id);
             await renderSchemes();
             const savedAfter = getSavedSchemeId();
             if (Number(savedAfter) === Number(s.id)) setActiveSchemeId(null);
