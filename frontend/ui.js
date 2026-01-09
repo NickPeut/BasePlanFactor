@@ -41,7 +41,6 @@ function renderMessage(text, sender) {
 
 let oseResults = [];
 let factors = [];
-let factorColors = {};
 let oseByGoal = {};
 let activeFactors = new Set();
 
@@ -63,7 +62,6 @@ function clearDialog() {
 function clearOseUi() {
     oseResults = [];
     factors = [];
-    factorColors = {};
     oseByGoal = {};
     activeFactors = new Set();
 
@@ -87,14 +85,6 @@ function buildOse(results) {
 
     factors = [...fset];
 
-    const palette = [
-        "#f94144", "#f3722c", "#f8961e", "#f9c74f",
-        "#90be6d", "#43aa8b", "#577590", "#b5179e"
-    ];
-
-    factorColors = {};
-    factors.forEach((f, i) => factorColors[f] = palette[i % palette.length]);
-
     setOseData(oseByGoal, activeFactors);
 }
 
@@ -114,18 +104,10 @@ function renderFactorLegend() {
             updateNodeLabels();
         };
 
-        const colorBox = document.createElement("span");
-        colorBox.style.background = factorColors[f];
-        colorBox.style.display = "inline-block";
-        colorBox.style.width = "10px";
-        colorBox.style.height = "10px";
-        colorBox.style.margin = "0 6px";
-
         const label = document.createElement("span");
         label.textContent = f;
 
         item.appendChild(checkbox);
-        item.appendChild(colorBox);
         item.appendChild(label);
         box.appendChild(item);
     });
