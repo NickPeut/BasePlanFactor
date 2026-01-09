@@ -138,29 +138,11 @@ function renderFactorLegend() {
 function renderOseList(results) {
     const box = document.getElementById("ose-results");
     if (!box) return;
-    box.innerHTML = "<h3>Результаты ОСЭ:</h3>";
 
-    (results || []).forEach(r => {
-        const div = document.createElement("div");
-        const p = (r.p === null || r.p === undefined) ? "" : r.p;
-        const q = (r.q === null || r.q === undefined) ? "" : r.q;
-        div.textContent = `${r.factor} → ${r.goal}: p = ${p}, q = ${q}, H = ${r.H}`;
-        box.appendChild(div);
-    });
-
-    const goals = [];
-    const gset = new Set();
-
-    (results || []).forEach(r => {
-        if (!gset.has(r.goal)) {
-            gset.add(r.goal);
-            goals.push(r.goal);
-        }
-    });
-
-    const fList = (factors && factors.length) ? factors : [...new Set((results || []).map(r => r.factor))];
+    box.innerHTML = "";
 
     const h3 = document.createElement("h3");
+    h3.textContent = "Таблица факторов:";
     h3.className = "ose-table-title";
     box.appendChild(h3);
 
@@ -170,17 +152,9 @@ function renderOseList(results) {
     const thead = document.createElement("thead");
     const hr = document.createElement("tr");
 
-    const thGoal = document.createElement("th");
-    thGoal.textContent = "Цель";
-    hr.appendChild(thGoal);
-
-    const thParam = document.createElement("th");
-    thParam.textContent = "Параметр";
-    hr.appendChild(thParam);
-
-    fList.forEach(f => {
+    ["Название цели", "Название фактора", "q", "p", "H"].forEach(t => {
         const th = document.createElement("th");
-        th.textContent = f;
+        th.textContent = t;
         hr.appendChild(th);
     });
 
@@ -189,33 +163,36 @@ function renderOseList(results) {
 
     const tbody = document.createElement("tbody");
 
-    goals.forEach(g => {
-        ["p", "q"].forEach(param => {
-            const tr = document.createElement("tr");
+    (results || []).forEach(r => {
+        const tr = document.createElement("tr");
 
-            const tdGoal = document.createElement("td");
-            tdGoal.textContent = g;
-            tdGoal.className = "ose-goal";
-            tr.appendChild(tdGoal);
+        const tdGoal = document.createElement("td");
+        tdGoal.textContent = r.goal ?? "";
+        tr.appendChild(tdGoal);
 
-            const tdParam = document.createElement("td");
-            tdParam.textContent = param;
-            tr.appendChild(tdParam);
+        const tdFactor = document.createElement("td");
+        tdFactor.textContent = r.factor ?? "";
+        tr.appendChild(tdFactor);
 
-            fList.forEach(f => {
-                const td = document.createElement("td");
-                const pq = osePQByGoal?.[g]?.[f];
-                const v = pq ? pq[param] : undefined;
-                td.textContent = (v === null || v === undefined) ? "" : String(v);
-                tr.appendChild(td);
-            });
+        const tdQ = document.createElement("td");
+        tdQ.textContent = r.q ?? "";
+        tr.appendChild(tdQ);
 
-            tbody.appendChild(tr);
-        });
+        const tdP = document.createElement("td");
+        tdP.textContent = r.p ?? "";
+        tr.appendChild(tdP);
+
+        const tdH = document.createElement("td");
+        tdH.textContent = r.H ?? "";
+        tr.appendChild(tdH);
+
+        tbody.appendChild(tr);
     });
+
     table.appendChild(tbody);
     box.appendChild(table);
 }
+
 
 function isYesNo(text) {
     return text.includes("(да/нет)");
