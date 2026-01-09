@@ -29,6 +29,7 @@ import {
 } from "./graph.js";
 
 let dialogHistory = [];
+let schemesCache = [];
 
 function renderMessage(text, sender) {
     const box = document.getElementById("dialog-box");
@@ -42,6 +43,7 @@ function renderMessage(text, sender) {
 let oseResults = [];
 let factors = [];
 let oseByGoal = {};
+let osePQByGoal = {};
 let activeFactors = new Set();
 
 function addMessage(text, sender) {
@@ -57,6 +59,23 @@ function clearDialog() {
     dialogHistory = [];
     clearDialogHistory(getActiveSchemeId());
     clearSchemeState(getActiveSchemeId());
+}
+
+function updateActiveSchemeTitle(schemeId) {
+    const el = document.getElementById("active-scheme-title");
+    if (!el) return;
+
+    const s = (schemesCache || []).find(x => Number(x.id) === Number(schemeId));
+    el.textContent = s ? (s.name || "") : "";
+}
+
+function layoutTopbar() {
+    const topbar = document.getElementById("topbar");
+    const sp = document.getElementById("schemes-panel");
+    if (!topbar || !sp) return;
+
+    const r = sp.getBoundingClientRect();
+    topbar.style.left = `${Math.round(r.right)}px`;
 }
 
 function clearOseUi() {
@@ -75,12 +94,15 @@ function clearOseUi() {
 function buildOse(results) {
     oseResults = results || [];
     oseByGoal = {};
+    osePQByGoal = {};
     const fset = new Set();
 
     oseResults.forEach(r => {
         fset.add(r.factor);
         if (!oseByGoal[r.goal]) oseByGoal[r.goal] = {};
         oseByGoal[r.goal][r.factor] = r.H;
+        if (!osePQByGoal[r.goal]) osePQByGoal[r.goal] = {};
+        osePQByGoal[r.goal][r.factor] = { p: r.p, q: r.q };
     });
 
     factors = [...fset];
@@ -115,13 +137,84 @@ function renderFactorLegend() {
 
 function renderOseList(results) {
     const box = document.getElementById("ose-results");
+    if (!box) return;
     box.innerHTML = "<h3>Результаты ОСЭ:</h3>";
 
-    results.forEach(r => {
+    (results || []).forEach(r => {
         const div = document.createElement("div");
-        div.textContent = `${r.factor} → ${r.goal}: H = ${r.H}`;
+        const p = (r.p === null || r.p === undefined) ? "" : r.p;
+        const q = (r.q === null || r.q === undefined) ? "" : r.q;
+        div.textContent = `${r.factor} → ${r.goal}: p = ${p}, q = ${q}, H = ${r.H}`;
         box.appendChild(div);
     });
+
+    const goals = [];
+    const gset = new Set();
+
+    (results || []).forEach(r => {
+        if (!gset.has(r.goal)) {
+            gset.add(r.goal);
+            goals.push(r.goal);
+        }
+    });
+
+    const fList = (factors && factors.length) ? factors : [...new Set((results || []).map(r => r.factor))];
+
+    const h3 = document.createElement("h3");
+    h3.className = "ose-table-title";
+    box.appendChild(h3);
+
+    const table = document.createElement("table");
+    table.className = "ose-matrix";
+
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+
+    const thGoal = document.createElement("th");
+    thGoal.textContent = "Цель";
+    hr.appendChild(thGoal);
+
+    const thParam = document.createElement("th");
+    thParam.textContent = "Параметр";
+    hr.appendChild(thParam);
+
+    fList.forEach(f => {
+        const th = document.createElement("th");
+        th.textContent = f;
+        hr.appendChild(th);
+    });
+
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+
+    goals.forEach(g => {
+        ["p", "q"].forEach(param => {
+            const tr = document.createElement("tr");
+
+            const tdGoal = document.createElement("td");
+            tdGoal.textContent = g;
+            tdGoal.className = "ose-goal";
+            tr.appendChild(tdGoal);
+
+            const tdParam = document.createElement("td");
+            tdParam.textContent = param;
+            tr.appendChild(tdParam);
+
+            fList.forEach(f => {
+                const td = document.createElement("td");
+                const pq = osePQByGoal?.[g]?.[f];
+                const v = pq ? pq[param] : undefined;
+                td.textContent = (v === null || v === undefined) ? "" : String(v);
+                tr.appendChild(td);
+            });
+
+            tbody.appendChild(tr);
+        });
+    });
+    table.appendChild(tbody);
+    box.appendChild(table);
 }
 
 function isYesNo(text) {
@@ -186,6 +279,8 @@ async function sendAnswer(text) {
 
 async function startForScheme(schemeId) {
     setActiveSchemeId(schemeId);
+    updateActiveSchemeTitle(schemeId);
+    layoutTopbar();
     clearGraph();
     clearOseUi();
 
@@ -206,12 +301,16 @@ async function startForScheme(schemeId) {
     applyDialogResponse(data);
 }
 
-async function renderSchemes() {
+async function renderSchemes(schemesOverride = null) {
     const box = document.getElementById("scheme-list");
     box.innerHTML = "";
 
-    const schemes = await apiGetSchemes();
+    const schemes = schemesOverride || await apiGetSchemes();
+    schemesCache = schemes || [];
+
     const activeId = getSavedSchemeId();
+    updateActiveSchemeTitle(activeId);
+    layoutTopbar();
 
     schemes.forEach(s => {
         const row = document.createElement("div");
@@ -225,17 +324,37 @@ async function renderSchemes() {
 
         const delBtn = document.createElement("button");
         delBtn.className = "scheme-delete";
-        delBtn.type = "button";
         delBtn.textContent = "🗑";
-        delBtn.onclick = async e => {
-            e.preventDefault();
-            e.stopPropagation();
+        delBtn.onclick = async () => {
+            const wasActive = Number(getSavedSchemeId()) === Number(s.id);
+
             await apiDeleteScheme(s.id);
             clearDialogHistory(s.id);
             clearSchemeState(s.id);
-            await renderSchemes();
-            const savedAfter = getSavedSchemeId();
-            if (Number(savedAfter) === Number(s.id)) setActiveSchemeId(null);
+            setDialogActive(s.id, false);
+
+            const after = await apiGetSchemes();
+
+            if (wasActive) {
+                const nextId = (after && after.length) ? after[0].id : null;
+                setActiveSchemeId(nextId);
+                await renderSchemes(after);
+
+                if (nextId !== null && nextId !== undefined) {
+                    await startForScheme(nextId);
+                } else {
+                    const box = document.getElementById("dialog-box");
+                    if (box) box.innerHTML = "";
+                    dialogHistory = [];
+                    clearGraph();
+                    clearOseUi();
+                    updateActiveSchemeTitle(null);
+                    layoutTopbar();
+                }
+                return;
+            }
+
+            await renderSchemes(after);
         };
 
         row.appendChild(nameBtn);
@@ -283,7 +402,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
             const saved = getSavedSchemeId();
             const schemes = await renderSchemes();
-
+            layoutTopbar();
+            window.addEventListener("resize", layoutTopbar);
             if (schemes.length > 0) {
                 const first = schemes.find(s => s.id === saved) || schemes[0];
                 await startForScheme(first.id);

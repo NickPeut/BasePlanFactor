@@ -153,6 +153,8 @@ def handle_adpose(ans: str) -> DialogResponse:
         dialog.factors_results.append({
             "goal": goal.name,
             "factor": dialog.current_factor_name,
+            "p": round(p, 4),
+            "q": round(q, 4),
             "H": round(H, 4),
         })
 

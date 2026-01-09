@@ -171,6 +171,36 @@ body {
     overflow-y: auto;
 }
 
+#ose-results .ose-table-title {
+    margin-top: 14px;
+    margin-bottom: 8px;
+}
+
+#ose-results .ose-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+#ose-results .ose-matrix th,
+#ose-results .ose-matrix td {
+    border: 1px solid #e3e3e3;
+    padding: 6px 8px;
+    vertical-align: top;
+}
+
+#ose-results .ose-matrix th {
+    background: #fafafa;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+#ose-results .ose-matrix .ose-goal {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 #dragbar {
     width: 5px;
     background: #d0d4d9;
@@ -249,4 +279,36 @@ body {
     background: #e6e9ee;
     cursor: pointer;
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+#topbar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 44px;
+    background: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+}
+
+#active-scheme-title {
+    padding: 0 16px;
+    font-weight: 600;
+    color: #2a2a2a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#chat,
+#right-panel {
+    padding-top: 44px;
+    box-sizing: border-box;
+}
+
+#dragbar {
+    margin-top: 44px;
+    height: calc(100% - 44px);
 }
