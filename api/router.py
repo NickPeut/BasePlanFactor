@@ -6,7 +6,7 @@ from core.dialog_state import dialog
 from core.schemas import AnswerRequest, DialogResponse
 
 from db.session import SessionLocal
-from db.goal import GoalNode, serialize_tree
+from db.goal import GoalNode, serialize_tree, collect_goals
 from db.goals import get_all_goals
 from db.schemes import list_schemes, create_scheme, delete_scheme
 
@@ -15,9 +15,8 @@ from api.adpose import handle_adpose
 from api.edit_commands import (
     try_parse_edit_command,
     handle_edit_command,
-    handle_edit_flow,
-    EDIT_FLOW_STATES,
 )
+
 
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_auth)])
@@ -127,20 +126,29 @@ def start_dialog(scheme_id: Optional[int] = Query(None)):
         dialog.active_scheme_id = scheme_id
     else:
         _ensure_active_scheme_id()
-
     root = _load_tree_from_db(dialog.active_scheme_id)
+
     if root:
         dialog.root = root
+        dialog.current_node = root
         dialog.phase = "adpacf"
-        dialog.state = "ask_children"
+        dialog.state = "ask_add_subgoal"
+
+        dialog.used_names = set()
+        dialog.goal_by_name = {}
+
+        for n in collect_goals(dialog.root):
+            dialog.used_names.add(n.name.lower())
+            dialog.goal_by_name[n.name.lower()] = n
 
         return DialogResponse(
             phase=dialog.phase,
             state=dialog.state,
-            question="Схема загружена из БД. Можешь продолжать добавлять/редактировать цели.",
+            question=f"Схема загружена из БД. Добавить подцель для '{dialog.current_node.name}'? (да/нет)",
             tree=serialize_tree(dialog.root),
             ose_results=dialog.factors_results,
         )
+
 
     return DialogResponse(
         phase="adpacf",
@@ -154,9 +162,6 @@ def start_dialog(scheme_id: Optional[int] = Query(None)):
 @router.post("/dialog/answer", response_model=DialogResponse)
 def process_answer(req: AnswerRequest):
     text = req.answer.strip()
-
-    if dialog.state in EDIT_FLOW_STATES:
-        return handle_edit_flow(text)
 
     cmd = try_parse_edit_command(text)
     if cmd:

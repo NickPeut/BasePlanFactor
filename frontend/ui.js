@@ -220,6 +220,33 @@ function persistStatePatch(schemeId, data) {
     });
 }
 
+function applyDialogResponseSilent(data) {
+    if (data.tree) updateGraph(data.tree);
+
+    if (data.ose_results) {
+        buildOse(data.ose_results);
+        renderFactorLegend();
+        renderOseList(data.ose_results);
+        updateNodeLabels();
+    }
+
+    const yn = document.getElementById("yn-buttons");
+    const input = document.getElementById("answer");
+    const send = document.getElementById("send-btn");
+
+    if (isYesNo(data.question)) {
+        yn.style.display = "flex";
+        input.disabled = true;
+        send.disabled = true;
+    } else {
+        yn.style.display = "none";
+        input.disabled = false;
+        send.disabled = false;
+    }
+
+    persistStatePatch(getActiveSchemeId(), data);
+}
+
 function applyDialogResponse(data) {
     addMessage(data.question, "bot");
 
@@ -270,6 +297,10 @@ async function startForScheme(schemeId) {
         for (const m of saved) renderMessage(m.text, m.sender);
         setDialogActive(schemeId, true);
         applySavedState(schemeId);
+
+        // синхронизируем дерево/ОСЭ из backend (источник истины), не добавляя новое сообщение в историю
+        const data = await apiStart(schemeId);
+        applyDialogResponseSilent(data);
         return;
     }
 

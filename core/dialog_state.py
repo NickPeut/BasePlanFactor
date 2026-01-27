@@ -3,32 +3,38 @@ from db.goal import GoalNode
 
 class DialogState:
     def __init__(self):
-        self.phase: str = "adpacf"
-        self.state: str = "ask_root"
+        self.phase = "adpacf"
+        self.state = "ask_root"
         self.active_scheme_id = None
 
-        self.root: GoalNode | None = None
-        self.current_node: GoalNode | None = None
-        self.max_level: int = 3
+        self.root = None
+        self.current_node = None
+        self.max_level = 3
 
-        self.goals_ordered: list[GoalNode] = []
-        self.current_goal_idx: int = 0
-        self.current_factor_name: str | None = None
-        self.factors_results: list[dict] = []
-        self._p: float | None = None
+        self.used_names = set()
+        self.goal_by_name = {}
 
-        self.used_names: set[str] = set()
-        self.goal_by_name: dict[str, GoalNode] = {}
-        self.factor_set: set[str] = set()
+        self.current_factor_name = None
+        self._ose_goal = None
+        self._p = None
+        self.factors_results = []
+        self.factor_set = set()
 
-        self.prev_state: str | None = None
-        self.edit_goal_target: GoalNode | None = None
+        self.clfs = []
+        self.clf_tmp_name = None
+        self.clf_indices = None
+        self.clf_level = 1
+        self.clf_parent_goal = None
+        self.clf_done = False
 
-        self.add_goal_name: str | None = None
-        self.add_goal_current_goal: GoalNode | None = None
-        self.add_goal_factors_list: list[str] = []
-        self.add_goal_factor_index: int = 0
-        self.add_goal_current_factor: str | None = None
-        self.add_goal_tmp_p: float | None = None
+        self.prev_state = None
+        self.edit_goal_target = None
+
+        self.add_goal_name = None
+        self.add_goal_current_goal = None
+        self.add_goal_factors_list = []
+        self.add_goal_factor_index = 0
+        self.add_goal_current_factor = None
+        self.add_goal_tmp_p = None
 
 dialog = DialogState()

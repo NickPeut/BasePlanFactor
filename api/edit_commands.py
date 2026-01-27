@@ -2,868 +2,454 @@ import re
 
 from core.dialog_state import dialog
 from core.schemas import DialogResponse
-from db.goal import GoalNode, collect_goals, serialize_tree
+from db.goal import collect_goals, serialize_tree
+from db.session import SessionLocal
+from db.goals import (
+    list_classifiers,
+    create_classifier,
+    add_classifier_item,
+    get_classifier_with_items,
+    delete_classifier,
+)
 
-# Список состояний, которые относятся к "мастерам" редактирования/добавления
-EDIT_FLOW_STATES = {
-    "edit_goal_wait_new_name",
-    "add_goal_wait_parent",
-    "add_goal_ask_use_factors",
-    "add_goal_factor_confirm",
-    "add_goal_factor_p",
-    "add_goal_factor_q",
-}
-
-
-def _recalc_levels(root: GoalNode):
-    """Пересчитать уровни (level) всего дерева после перемещения цели."""
-    def dfs(node: GoalNode, lvl: int):
-        node.level = lvl
-        for ch in node.children:
-            dfs(ch, lvl + 1)
-
-    dfs(root, 1)
+from api.adpose import _strip_summaries, _append_goal_summaries
 
 
-def _rebuild_goals_ordered():
-    """Пересобрать список целей для ОСЭ после изменения дерева."""
-    if dialog.root:
-        dialog.goals_ordered = collect_goals(dialog.root)
-    else:
-        dialog.goals_ordered = []
+def edit_response(text):
+    return DialogResponse(
+        phase=dialog.phase,
+        state=dialog.state,
+        question=text,
+        tree=serialize_tree(dialog.root) if dialog.root else [],
+        ose_results=dialog.factors_results,
+        message=None,
+    )
+
+def edit_question(text, state=None):
+    return DialogResponse(
+        phase=dialog.phase,
+        state=state or dialog.state,
+        question=text,
+        tree=serialize_tree(dialog.root) if dialog.root else [],
+        ose_results=dialog.factors_results,
+        message=None,
+    )
+
+def _rebuild_goal_maps():
+    dialog.used_names = set()
+    dialog.goal_by_name = {}
+    if not dialog.root:
+        return
+    for g in collect_goals(dialog.root):
+        dialog.used_names.add(g.name.lower())
+        dialog.goal_by_name[g.name.lower()] = g
 
 
-def try_parse_edit_command(text: str):
-    """
-    Парсим команды редактирования (без учёта состояний мастера).
-    Команды работают и с кавычками, и без, регистр не важен.
-    Возвращаем tuple('тип_команды', ...), либо None.
-    """
+def _recalc_ose_results():
+    base = _strip_summaries(dialog.factors_results)
+    dialog.factors_results = _append_goal_summaries(base, dialog.root) if dialog.root else base
+
+
+
+def _persist_tree():
+    scheme_id = getattr(dialog, "active_scheme_id", None)
+    if scheme_id is None:
+        return
+    session = SessionLocal()
+    try:
+        replace_goals_from_tree(session, scheme_id, dialog.root)
+    finally:
+        session.close()
+
+
+def _help_text():
+    return "\n".join(
+        [
+            "Команды:",
+            "- помощь / команды",
+            "- цели / дерево (перейти к целям)",
+            "- осэ / посчитать осэ (перейти к ОСЭ)",
+            "- добавить классификатор <имя>",
+            "- добавить элемент <значение> в классификатор <имя>",
+            "- покажи классификаторы",
+            "- переименовать цель <старое> в <новое>",
+            "- удалить цель <имя|id>",
+            "- удалить классификатор <имя>",
+            "- удалить фактор <имя>",
+            "- удалить осэ",
+        ]
+    )
+
+def try_parse_edit_command(text):
     s = text.strip()
-    if not s:
-        return None
 
-    # --- интерактивное изменение цели: изменить цель X ---
-    m = re.match(r'изменить\s+цель\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
-    if not m:
-        m = re.match(r'изменить\s+цель\s+(.+?)\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("edit_goal_interactive", m.group(1))
+    if s.lower() in ["помощь", "help", "команды", "?"]:
+        return ("help",)
 
-    # --- одношаговое переименование цели: измени цель "A" на "B" ---
-    m = re.match(r'измени\s+цель\s+"(.+?)"\s+на\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("rename_goal", m.group(1), m.group(2))
-
-    # --- переименование фактора ---
-    m = re.match(r'измени\s+фактор\s+"(.+?)"\s+на\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("rename_factor", m.group(1), m.group(2))
-
-    # --- переместить цель X под Y ---
-    m = re.match(r'перемести\s+цель\s+"(.+?)"\s+под\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
-    if not m:
-        m = re.match(r'перемести\s+цель\s+(.+?)\s+под\s+(.+?)\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("move_goal", m.group(1), m.group(2))
-
-    # --- удалить цель X ---
-    m = re.match(r'удали\s+цель\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
-    if not m:
-        m = re.match(r'удали\s+цель\s+(.+?)\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("delete_goal", m.group(1))
-
-    # --- удалить фактор Y ---
-    m = re.match(r'удали\s+фактор\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
-    if not m:
-        m = re.match(r'удали\s+фактор\s+(.+?)\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("delete_factor", m.group(1))
-
-    # --- универсальное удаление: удали X / удали "X" ---
-    m = re.match(r'удали\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
-    if not m:
-        m = re.match(r'удали\s+(.+?)\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("delete_auto", m.group(1))
-
-    # --- старая форма добавления подцели с кавычками ---
-    m = re.match(r'добавь\s+"(.+?)"\s+как\s+подцель\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("add_subgoal_old", m.group(1), m.group(2))
-
-    # --- новая форма: добавь цель X как подцель Y ---
-    m = re.match(r'добав(ить|ь)\s+цель\s+"(.+?)"\s+как\s+подцель\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
-    if not m:
-        m = re.match(r'добав(ить|ь)\s+цель\s+(.+?)\s+как\s+подцель\s+(.+?)\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("add_goal_with_parent", m.group(2), m.group(3))
-
-    # --- новая форма: добавь цель X (родителя спросим отдельно) ---
-    m = re.match(r'добав(ить|ь)\s+цель\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
-    if not m:
-        m = re.match(r'добав(ить|ь)\s+цель\s+(.+?)\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("add_goal_no_parent", m.group(2))
-
-    # --- добавить фактор (в любой момент, в т.ч. после завершения) ---
-    m = re.match(r'добав(ить|ь)\s+фактор\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("add_factor_after_finish", m.group(2))
-
-    m = re.match(r'фактор\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("add_factor_after_finish", m.group(1))
-
-    m = re.match(r'добав(ить|ь)\s+"(.+?)"\s+как\s+фактор\s*$', s, flags=re.IGNORECASE)
-    if m:
-        return ("add_factor_after_finish", m.group(2))
-
-    # --- пропустить / продолжить ---
-    if s.lower() in ["пропустить", "продолжить"]:
-        return ("skip",)
-
-    # --- завершить ОСЭ ---
     if s.lower() in ["завершить", "конец", "finish", "stop"]:
         return ("finish",)
 
+    if s.lower() in ["цели", "цель", "дерево", "добавить цели", "добавить цель"]:
+        return ("go_tree",)
+
+    if s.lower() in ["осэ", "ose", "посчитать осэ", "считать осэ"]:
+        return ("go_ose",)
+
+    m = re.match(r'добав(ить|ь)\s+классификатор\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
+    if not m:
+        m = re.match(r'добав(ить|ь)\s+классификатор\s+(.+?)\s*$', s, flags=re.IGNORECASE)
+    if m:
+        return ("add_classifier", m.group(2))
+
+    m = re.match(
+        r'добав(ить|ь)\s+элемент\s+"(.+?)"\s+в\s+классификатор\s+"(.+?)"\s*$',
+        s,
+        flags=re.IGNORECASE,
+    )
+    if not m:
+        m = re.match(
+            r'добав(ить|ь)\s+элемент\s+(.+?)\s+в\s+классификатор\s+(.+?)\s*$',
+            s,
+            flags=re.IGNORECASE,
+        )
+    if m:
+        return ("add_classifier_item", m.group(2), m.group(3))
+
+    m = re.match(r'переименовать\s+цель\s+"(.+?)"\s+в\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
+    if not m:
+        m = re.match(r'переименовать\s+цель\s+(.+?)\s+в\s+(.+?)\s*$', s, flags=re.IGNORECASE)
+    if m:
+        return ("rename_goal", m.group(1), m.group(2))
+
+    m = re.match(r'удалить\s+цель\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
+    if not m:
+        m = re.match(r'удалить\s+цель\s+(.+?)\s*$', s, flags=re.IGNORECASE)
+    if m:
+        return ("delete_goal", m.group(1))
+
+    m = re.match(r'удалить\s+классификатор\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
+    if not m:
+        m = re.match(r'удалить\s+классификатор\s+(.+?)\s*$', s, flags=re.IGNORECASE)
+    if m:
+        return ("delete_classifier", m.group(1))
+
+    m = re.match(r'удалить\s+фактор\s+"(.+?)"\s*$', s, flags=re.IGNORECASE)
+    if not m:
+        m = re.match(r'удалить\s+фактор\s+(.+?)\s*$', s, flags=re.IGNORECASE)
+    if m:
+        return ("delete_factor", m.group(1))
+
+    if s.lower() in ["удалить осэ", "очистить осэ", "сбросить осэ"]:
+        return ("clear_ose",)
+
+    if s.lower() in ["покажи классификаторы", "показать классификаторы"]:
+        return ("show_classifiers",)
+
+    m = re.match(
+        r'начать\s+классификаторы\s+для\s+цели\s+"(.+?)"\s*$',
+        s,
+        flags=re.IGNORECASE,
+    )
+    if not m:
+        m = re.match(
+            r'начать\s+классификаторы\s+для\s+цели\s+(.+?)\s*$',
+            s,
+            flags=re.IGNORECASE,
+        )
+    if m:
+        return ("clf_start_for_goal", m.group(1))
+
+    m = re.match(
+        r'используй\s+классификаторы\s+"(.+?)"\s+и\s+"(.+?)"\s*$',
+        s,
+        flags=re.IGNORECASE,
+    )
+    if not m:
+        m = re.match(
+            r'используй\s+классификаторы\s+(.+?)\s+и\s+(.+?)\s*$',
+            s,
+            flags=re.IGNORECASE,
+        )
+    if m:
+        return ("clf_use_two", m.group(1), m.group(2))
+
+    if dialog.state == "clf_pair_decide" and s.lower() in ["следующее сочетание", "следующее", "пропустить", "продолжить"]:
+        return ("clf_next_pair",)
+
+    if dialog.state == "clf_pair_decide" and s.lower() in ["стоп классификаторы", "остановить классификаторы"]:
+        return ("clf_stop",)
+
     return None
 
+def cmd_show_classifiers(_cmd):
+    scheme_id = dialog.active_scheme_id
+    if scheme_id is None:
+        return edit_response("Активная схема не выбрана.")
 
-def edit_response(msg: str) -> DialogResponse:
-    """
-    Унифицированный ответ после команды (НЕ мастера),
-    + подсказка по доступным командам.
-    """
-    help_text = (
-        msg + "\n\n"
-        "Доступные команды:\n"
-        "- изменить цель X\n"
-        "- измени цель \"A\" на \"B\"\n"
-        "- перемести цель X под Y\n"
-        "- удали цель X\n"
-        "- удали фактор Y\n"
-        "- добавь цель X как подцель Y\n"
-        "- добавь цель X (родителя спросят отдельно)\n"
-        "- добавь фактор \"F\" (оценка для всех целей)\n"
-        "- пропустить / продолжить\n"
-        "- завершить\n"
-    )
+    session = SessionLocal()
+    try:
+        items = list_classifiers(session, scheme_id)
+    finally:
+        session.close()
+
+    if not items:
+        return edit_response("Классификаторы не заданы.")
+
+    lines = ["Классификаторы:"]
+    for c in items:
+        lines.append(f"- [{c.level}] {c.name}")
+    return edit_response("\n".join(lines))
+
+
+def cmd_add_classifier(cmd):
+    name = cmd[1].strip()
+    scheme_id = dialog.active_scheme_id
+    if scheme_id is None:
+        return edit_response("Активная схема не выбрана.")
+    if not name:
+        return edit_response("Введите название классификатора.")
+
+    dialog.phase = "adpacf"
+
+    if dialog.state not in ("clf_name", "clf_items", "clf_more"):
+        dialog.clfs = []
+        dialog.clf_tmp_name = None
+        dialog.clf_parent_goal = None
+        dialog.clf_indices = None
+        dialog.clf_level = 1
+        dialog.clf_done = False
+
+    dialog.clf_tmp_name = name
+    dialog.state = "clf_items"
 
     return DialogResponse(
-        phase=dialog.phase,
-        state=dialog.state,
-        question=help_text,
+        phase="adpacf",
+        state="clf_items",
+        question=(
+            f"Классификатор = '{dialog.clf_tmp_name}'.\n"
+            "Введите элементы через запятую (ключевые слова):"
+        ),
         tree=serialize_tree(dialog.root) if dialog.root else [],
         ose_results=dialog.factors_results,
-        message=msg,
+        message=None,
     )
 
 
-# =====================================================================
-#  ОБРАБОТЧИКИ КОМАНД (не зависят от состояний мастера)
-# =====================================================================
+def cmd_add_classifier_item(cmd):
+    value = cmd[1].strip()
+    clf_name = cmd[2].strip()
+    scheme_id = dialog.active_scheme_id
+    session = SessionLocal()
+    try:
+        clf = get_classifier_with_items(session, scheme_id, clf_name)
+        if not clf:
+            return edit_response("Классификатор не найден.")
+        add_classifier_item(session, clf.id, value)
+    except Exception:
+        session.rollback()
+        return edit_response("Не удалось добавить элемент.")
+    finally:
+        session.close()
 
-def handle_edit_command(cmd) -> DialogResponse:
+    return edit_response(f"Элемент '{value}' добавлен.")
+
+
+def cmd_clf_start_for_goal(cmd):
+    goal_name = cmd[1].strip().lower()
+
+    if goal_name not in dialog.goal_by_name:
+        return edit_response("Цель не найдена.")
+
+    parent = dialog.goal_by_name[goal_name]
+    if parent.level >= dialog.max_level:
+        return edit_response("Достигнут максимальный уровень.")
+
+    dialog.clf_parent_goal = parent
+    dialog.clf_level = parent.level + 1
+    dialog.clf_pairs = []
+    dialog.clf_pair_idx = 0
+    dialog.state = "ask_add_subgoal"
+
+    return edit_response(f"Режим классификаторов для цели '{parent.name}'.")
+
+
+def cmd_clf_use_two(cmd):
+    c1_name, c2_name = cmd[1].strip(), cmd[2].strip()
+    scheme_id = dialog.active_scheme_id
+    session = SessionLocal()
+    try:
+        c1 = get_classifier_with_items(session, scheme_id, c1_name)
+        c2 = get_classifier_with_items(session, scheme_id, c2_name)
+    finally:
+        session.close()
+
+    if not c1 or not c2:
+        return edit_response("Один из классификаторов не найден.")
+
+    dialog.clf_pairs = [(a.value, b.value) for a in c1.items for b in c2.items]
+    dialog.clf_pair_idx = 0
+    dialog.state = "clf_pair_decide"
+
+    x, y = dialog.clf_pairs[0]
+    return edit_question(f"{x} / {y} — добавить как подцель? (да/нет)")
+
+def cmd_clf_next_pair(_cmd):
+    dialog.clf_pair_idx += 1
+    if dialog.clf_pair_idx >= len(dialog.clf_pairs):
+        dialog.state = "ask_add_subgoal"
+        dialog.clf_pairs = []
+        return edit_response("Сочетания закончились.")
+
+    x, y = dialog.clf_pairs[dialog.clf_pair_idx]
+    return edit_question(f"{x} / {y} — добавить? (да/нет)", state="clf_pair_decide")
+
+
+def cmd_clf_stop(_cmd):
+    dialog.clf_pairs = []
+    dialog.clf_parent_goal = None
+    dialog.state = "ask_add_subgoal"
+    return edit_response("Режим классификаторов остановлен.")
+def cmd_help(_cmd):
+    return edit_response(_help_text())
+
+
+def cmd_finish(_cmd):
+    # не сбрасываем данные, только переводим в нейтральное состояние
+    if dialog.root:
+        dialog.phase = "adpacf"
+        dialog.state = "after_classifiers"
+        return edit_response("Завершено.\n" + _help_text())
+    dialog.phase = "adpacf"
+    dialog.state = "ask_root"
+    return edit_response("Завершено.\n" + _help_text())
+
+
+def cmd_go_tree(_cmd):
+    dialog.phase = "adpacf"
+    dialog.state = "ask_add_subgoal" if dialog.root else "ask_root"
+    return edit_response("Переход к целям.")
+
+
+def cmd_go_ose(_cmd):
+    if not dialog.root:
+        return edit_response("Сначала задайте дерево целей.")
+    dialog.phase = "adpose"
+    dialog.state = "ask_factor_name"
+    return edit_response("Переход к ОСЭ.")
+
+
+def cmd_rename_goal(cmd):
+    old_name = cmd[1].strip().lower()
+    new_name = cmd[2].strip()
+    if not dialog.root:
+        return edit_response("Дерево целей не задано.")
+    if not new_name:
+        return edit_response("Пустое имя цели.")
+    if new_name.lower() in dialog.used_names:
+        return edit_response("Название уже существует.")
+    node = dialog.goal_by_name.get(old_name)
+    if not node:
+        return edit_response("Цель не найдена.")
+    node.name = new_name
+    _rebuild_goal_maps()
+    _persist_tree()
+    _recalc_ose_results()
+    return edit_response("Цель переименована.")
+
+
+def _find_goal_token(token: str):
+    t = token.strip()
+    if not dialog.root:
+        return None
+    if t.isdigit():
+        gid = int(t)
+        for g in collect_goals(dialog.root):
+            if g.id == gid:
+                return g
+        return None
+    return dialog.goal_by_name.get(t.lower())
+
+
+def cmd_delete_goal(cmd):
+    token = cmd[1]
+    node = _find_goal_token(token)
+    if not node:
+        return edit_response("Цель не найдена.")
+    if node.parent is None:
+        return edit_response("Нельзя удалить корневую цель.")
+    # удалить из списка детей родителя
+    node.parent.children = [ch for ch in node.parent.children if ch is not node]
+    # если текущий узел указывает на удалённое — откат
+    if dialog.current_node is node:
+        dialog.current_node = node.parent
+    _rebuild_goal_maps()
+    _persist_tree()
+    # удалить оценки ОСЭ по этой цели
+    base = [r for r in _strip_summaries(dialog.factors_results) if str(r.get("goal", "")).lower() != node.name.lower()]
+    dialog.factors_results = base
+    dialog.factor_set = set(r.get("factor") for r in base if r.get("factor"))
+    _recalc_ose_results()
+    return edit_response("Цель удалена.")
+
+
+def cmd_delete_classifier(cmd):
+    name = cmd[1].strip()
+    scheme_id = dialog.active_scheme_id
+    if scheme_id is None:
+        return edit_response("Активная схема не выбрана.")
+    session = SessionLocal()
+    try:
+        ok = delete_classifier(session, scheme_id, name)
+    except Exception:
+        session.rollback()
+        return edit_response("Не удалось удалить классификатор.")
+    finally:
+        session.close()
+    if not ok:
+        return edit_response("Классификатор не найден.")
+    return edit_response("Классификатор удалён.")
+
+def cmd_clear_ose(_cmd):
+    dialog.factors_results = []
+    dialog.factor_set = set()
+    dialog.current_factor_name = None
+    dialog._ose_goal = None
+    dialog._p = None
+    dialog._q = None
+    return edit_response("ОСЭ очищено.")
+
+def cmd_delete_factor(cmd):
+    name = cmd[1].strip().lower()
+    base = _strip_summaries(dialog.factors_results)
+    base2 = [r for r in base if str(r.get("factor", "")).lower() != name]
+    dialog.factors_results = base2
+    dialog.factor_set = set(r.get("factor") for r in base2 if r.get("factor"))
+    _recalc_ose_results()
+    return edit_response("Фактор удалён.")
+
+_COMMANDS = {
+    "help": cmd_help,
+    "finish": cmd_finish,
+    "go_tree": cmd_go_tree,
+    "go_ose": cmd_go_ose,
+    "rename_goal": cmd_rename_goal,
+    "delete_goal": cmd_delete_goal,
+    "delete_classifier": cmd_delete_classifier,
+    "delete_factor": cmd_delete_factor,
+    "clear_ose": cmd_clear_ose,
+
+    "show_classifiers": cmd_show_classifiers,
+    "add_classifier": cmd_add_classifier,
+    "add_classifier_item": cmd_add_classifier_item,
+    "clf_start_for_goal": cmd_clf_start_for_goal,
+    "clf_use_two": cmd_clf_use_two,
+    "clf_next_pair": cmd_clf_next_pair,
+    "clf_stop": cmd_clf_stop,
+}
+
+def handle_edit_command(cmd):
     kind = cmd[0]
-
-    # --- пропустить шаг ---
-    if kind == "skip":
-        return edit_response("Шаг пропущен.")
-
-    # --- завершить ОСЭ ---
-    if kind == "finish":
-        dialog.state = "finish_ose"
-        return edit_response("Диалог ОСЭ завершён. Можно добавить новый фактор или редактировать цели.")
-
-    # --- интерактивное изменение цели: изменить цель X ---
-    if kind == "edit_goal_interactive":
-        name = cmd[1].strip()
-        key = name.lower()
-
-        if key not in dialog.goal_by_name:
-            return edit_response(f"Цель '{name}' не найдена.")
-
-        dialog.edit_goal_target = dialog.goal_by_name[key]
-        dialog.prev_state = dialog.state
-        dialog.state = "edit_goal_wait_new_name"
-
-        return DialogResponse(
-            phase=dialog.phase,
-            state=dialog.state,
-            question=f"Введите новое имя для цели '{dialog.edit_goal_target.name}':",
-            tree=serialize_tree(dialog.root) if dialog.root else [],
-            ose_results=dialog.factors_results,
-            message=f"Изменяем цель '{dialog.edit_goal_target.name}'.",
-        )
-
-    # --- одношаговое переименование цели: измени цель "A" на "B" ---
-    if kind == "rename_goal":
-        old, new = cmd[1].strip(), cmd[2].strip()
-        old_l = old.lower()
-        new_l = new.lower()
-
-        if old_l not in dialog.goal_by_name:
-            return edit_response(f"Цель '{old}' не найдена.")
-
-        if new_l in dialog.used_names:
-            return edit_response("Новое название уже используется.")
-
-        node = dialog.goal_by_name.pop(old_l)
-        old_display = node.name
-
-        node.name = new
-        dialog.goal_by_name[new_l] = node
-        dialog.used_names.remove(old_l)
-        dialog.used_names.add(new_l)
-
-        # обновляем имя в результатах ОСЭ
-        for r in dialog.factors_results:
-            if r["goal"] == old_display:
-                r["goal"] = new
-
-        return edit_response(f"Цель '{old_display}' переименована в '{new}'.")
-
-    # --- переименование фактора ---
-    if kind == "rename_factor":
-        old, new = cmd[1].strip(), cmd[2].strip()
-        old_l = old.lower()
-        new_l = new.lower()
-
-        if old_l not in dialog.factor_set:
-            return edit_response(f"Фактор '{old}' не найден.")
-
-        if new_l in dialog.used_names:
-            return edit_response("Новое название уже используется.")
-
-        for r in dialog.factors_results:
-            if r["factor"].lower() == old_l:
-                r["factor"] = new
-
-        dialog.factor_set.remove(old_l)
-        dialog.factor_set.add(new_l)
-        dialog.used_names.remove(old_l)
-        dialog.used_names.add(new_l)
-
-        return edit_response(f"Фактор '{old}' переименован в '{new}'.")
-
-    # --- переместить цель X под Y ---
-    if kind == "move_goal":
-        name, parent = cmd[1].strip(), cmd[2].strip()
-        name_l, parent_l = name.lower(), parent.lower()
-
-        if not dialog.root:
-            return edit_response("Дерево целей ещё не построено.")
-
-        if name_l not in dialog.goal_by_name:
-            return edit_response(f"Цель '{name}' не найдена.")
-
-        if parent_l not in dialog.goal_by_name:
-            return edit_response(f"Цель-родитель '{parent}' не найдена.")
-
-        node = dialog.goal_by_name[name_l]
-        new_parent = dialog.goal_by_name[parent_l]
-
-        # запретим двигать корень
-        if node is dialog.root:
-            return edit_response("Нельзя переместить корневую цель.")
-
-        # запретим делать ребёнка родителем самого себя (и своих потомков)
-        cur = new_parent
-        while cur is not None:
-            if cur is node:
-                return edit_response("Нельзя переместить цель под одну из её подцелей.")
-            cur = cur.parent
-
-        # проверка глубины
-        if new_parent.level >= dialog.max_level:
-            return edit_response(
-                f"Нельзя переместить под '{new_parent.name}': глубина превысит максимум ({dialog.max_level})."
-            )
-
-        # удаляем из старого родителя
-        if node.parent:
-            node.parent.children.remove(node)
-
-        # новый родитель
-        node.parent = new_parent
-        new_parent.children.append(node)
-
-        # пересчитываем уровни
-        _recalc_levels(dialog.root)
-        _rebuild_goals_ordered()
-
-        return edit_response(f"Цель '{node.name}' перемещена под '{new_parent.name}'.")
-
-    # --- удалить цель ---
-    if kind == "delete_goal":
-        name = cmd[1].strip()
-        name_l = name.lower()
-
-        if name_l not in dialog.goal_by_name:
-            return edit_response(f"Цель '{name}' не найдена.")
-
-        node = dialog.goal_by_name[name_l]
-
-        # не даём удалить корень "тихо" — можно, но допустим разрешим
-        if node.parent:
-            node.parent.children.remove(node)
-        else:
-            # удаляем всё дерево
-            dialog.root = None
-
-        removed_names = []
-
-        def remove_subtree(n: GoalNode):
-            removed_names.append(n.name)
-            dialog.goal_by_name.pop(n.name.lower(), None)
-            dialog.used_names.discard(n.name.lower())
-            for ch in n.children:
-                remove_subtree(ch)
-
-        remove_subtree(node)
-
-        # чистим ОСЭ
-        dialog.factors_results = [
-            r for r in dialog.factors_results if r["goal"] not in removed_names
-        ]
-
-        if dialog.root:
-            _rebuild_goals_ordered()
-        else:
-            dialog.goals_ordered = []
-
-        return edit_response(f"Цель '{name}' и её подцели удалены.")
-
-    # --- удалить фактор ---
-    if kind == "delete_factor":
-        name = cmd[1].strip()
-        name_l = name.lower()
-
-        if name_l not in dialog.factor_set:
-            return edit_response(f"Фактор '{name}' не найден.")
-
-        dialog.factor_set.remove(name_l)
-        dialog.used_names.discard(name_l)
-
-        dialog.factors_results = [
-            r for r in dialog.factors_results if r["factor"].lower() != name_l
-        ]
-
-        return edit_response(f"Фактор '{name}' удалён.")
-
-    # --- автоудаление: сначала пробуем цель, потом фактор ---
-    if kind == "delete_auto":
-        name = cmd[1].strip()
-        name_l = name.lower()
-
-        if name_l in dialog.goal_by_name:
-            return handle_edit_command(("delete_goal", name))
-        if name_l in dialog.factor_set:
-            return handle_edit_command(("delete_factor", name))
-
-        return edit_response(f"'{name}' не найдено ни среди целей, ни среди факторов.")
-
-    # --- старая add_subgoal (с кавычками) ---
-    if kind == "add_subgoal_old":
-        new, parent = cmd[1].strip(), cmd[2].strip()
-        new_l, parent_l = new.lower(), parent.lower()
-
-        if parent_l not in dialog.goal_by_name:
-            return edit_response(f"Родительская цель '{parent}' не найдена.")
-
-        if new_l in dialog.used_names:
-            return edit_response("Такое название уже используется.")
-
-        parent_node = dialog.goal_by_name[parent_l]
-        if parent_node.level >= dialog.max_level:
-            return edit_response("Нельзя добавить глубже максимального уровня дерева.")
-
-        child = parent_node.add_child(new)
-        dialog.goal_by_name[new_l] = child
-        dialog.used_names.add(new_l)
-        _recalc_levels(dialog.root)
-        _rebuild_goals_ordered()
-
-        return edit_response(f"Подцель '{new}' добавлена к цели '{parent}'.")
-
-    # --- добавь цель X как подцель Y ---
-    if kind == "add_goal_with_parent":
-        new, parent = cmd[1].strip(), cmd[2].strip()
-        new_l, parent_l = new.lower(), parent.lower()
-
-        if not dialog.root:
-            return edit_response("Дерево целей ещё не построено. Сначала задайте главную цель.")
-
-        if parent_l not in dialog.goal_by_name:
-            return edit_response(f"Родительская цель '{parent}' не найдена.")
-
-        if new_l in dialog.used_names:
-            return edit_response("Такое название уже используется.")
-
-        parent_node = dialog.goal_by_name[parent_l]
-        if parent_node.level >= dialog.max_level:
-            return edit_response("Нельзя добавить глубже максимального уровня дерева.")
-
-        child = parent_node.add_child(new)
-        dialog.goal_by_name[new_l] = child
-        dialog.used_names.add(new_l)
-        _recalc_levels(dialog.root)
-        _rebuild_goals_ordered()
-
-        dialog.add_goal_current_goal = child
-        dialog.add_goal_name = child.name
-
-        # если факторов ещё нет — просто добавляем цель
-        if not dialog.factor_set:
-            return edit_response(
-                f"Цель '{child.name}' добавлена как подцель '{parent_node.name}'.\n"
-                f"Факторы пока не заданы. Вы можете добавить их позже с помощью команды 'добавить фактор'."
-            )
-
-        # запускаем мастер ввода p/q по уже существующим факторам
-        dialog.prev_state = dialog.state
-        dialog.state = "add_goal_ask_use_factors"
-
-        return DialogResponse(
-            phase=dialog.phase,
-            state=dialog.state,
-            question=(
-                f"Цель '{child.name}' добавлена как подцель '{parent_node.name}'.\n"
-                "Хотите ввести значения факторов для этой цели? (да/нет)"
-            ),
-            tree=serialize_tree(dialog.root),
-            ose_results=dialog.factors_results,
-            message=f"Добавлена новая цель '{child.name}'.",
-        )
-
-    # --- добавь цель X (родителя спросим отдельно) ---
-    if kind == "add_goal_no_parent":
-        new = cmd[1].strip()
-        new_l = new.lower()
-
-        if not dialog.root:
-            return edit_response("Дерево целей ещё не построено. Сначала задайте главную цель.")
-
-        if new_l in dialog.used_names:
-            return edit_response("Такое название уже используется.")
-
-        dialog.add_goal_name = new
-        dialog.prev_state = dialog.state
-        dialog.state = "add_goal_wait_parent"
-
-        return DialogResponse(
-            phase=dialog.phase,
-            state=dialog.state,
-            question=f"Укажите родительскую цель для '{new}':",
-            tree=serialize_tree(dialog.root),
-            ose_results=dialog.factors_results,
-            message=f"Добавление цели '{new}'.",
-        )
-
-    # --- добавить фактор 'после завершения' (для всех целей) ---
-    if kind == "add_factor_after_finish":
-        fname = cmd[1].strip()
-        fl = fname.lower()
-
-        if not dialog.root:
-            return edit_response("Дерево целей ещё не построено. Сначала задайте цели.")
-
-        if fl in dialog.used_names:
-            return edit_response(f"Название '{fname}' уже используется.")
-
-        dialog.used_names.add(fl)
-        dialog.factor_set.add(fl)
-        dialog.current_factor_name = fname
-
-        if not dialog.goals_ordered:
-            _rebuild_goals_ordered()
-        if not dialog.goals_ordered:
-            return edit_response("Список целей пуст, добавлять фактор некуда.")
-
-        dialog.phase = "adpose"
-        dialog.state = "ask_p"
-        dialog.current_goal_idx = 0
-
-        first_goal = dialog.goals_ordered[0]
-
-        return DialogResponse(
-            phase="adpose",
-            state="ask_p",
-            question=(
-                f"Добавляем новый фактор '{fname}'.\n"
-                f"Введите p (0..1) для цели '{first_goal.name}':"
-            ),
-            tree=serialize_tree(dialog.root),
-            ose_results=dialog.factors_results,
-            message=f"Фактор '{fname}' добавлен. Начинаем оценку для всех целей.",
-        )
-
-    # неизвестная команда
-    return edit_response("Команда не распознана.")
-def handle_edit_flow(ans: str) -> DialogResponse:
-    """
-    Обработка шагов "мастеров" редактирования/добавления,
-    которые занимают несколько сообщений.
-    """
-    text = ans.strip()
-
-    # --------------------------------------------------------
-    # 1) Мастер: изменить цель X → новое имя
-    # --------------------------------------------------------
-    if dialog.state == "edit_goal_wait_new_name":
-        if not dialog.edit_goal_target:
-            # что-то пошло не так, выходим
-            dialog.state = dialog.prev_state or dialog.state
-            dialog.prev_state = None
-            return edit_response("Ошибка: цель для редактирования не найдена.")
-
-        new_name = text
-        if not new_name:
-            return DialogResponse(
-                phase=dialog.phase,
-                state=dialog.state,
-                question="Имя не может быть пустым. Введите новое имя цели:",
-                tree=serialize_tree(dialog.root) if dialog.root else [],
-                ose_results=dialog.factors_results,
-            )
-
-        old_display = dialog.edit_goal_target.name
-        old_l = old_display.lower()
-        new_l = new_name.lower()
-
-        if new_l != old_l and new_l in dialog.used_names:
-            return DialogResponse(
-                phase=dialog.phase,
-                state=dialog.state,
-                question="Такое имя уже используется. Введите другое имя:",
-                tree=serialize_tree(dialog.root) if dialog.root else [],
-                ose_results=dialog.factors_results,
-            )
-
-        # переименование
-        dialog.goal_by_name.pop(old_l, None)
-        dialog.used_names.discard(old_l)
-
-        dialog.edit_goal_target.name = new_name
-
-        dialog.goal_by_name[new_l] = dialog.edit_goal_target
-        dialog.used_names.add(new_l)
-
-        # обновим результаты ОСЭ
-        for r in dialog.factors_results:
-            if r["goal"] == old_display:
-                r["goal"] = new_name
-
-        # завершаем мастер, возвращаемся в прежнее состояние
-        dialog.state = dialog.prev_state or dialog.state
-        dialog.prev_state = None
-        dialog.edit_goal_target = None
-
-        msg = (
-            f"Имя цели '{old_display}' изменено на '{new_name}'.\n\n"
-            "Для изменения факторов этой цели вы можете использовать команды:\n"
-            "- добавь фактор \"F\" (оценка для всех целей)\n"
-            "- удали фактор F\n"
-            "- или запусти ОСЭ заново для новых факторов."
-        )
-
-        return DialogResponse(
-            phase=dialog.phase,
-            state=dialog.state,
-            question=msg,
-            tree=serialize_tree(dialog.root) if dialog.root else [],
-            ose_results=dialog.factors_results,
-            message=f"Цель переименована в '{new_name}'.",
-        )
-
-    # --------------------------------------------------------
-    # 2) Мастер: добавь цель X → спросить родителя
-    # --------------------------------------------------------
-    if dialog.state == "add_goal_wait_parent":
-        parent_name = text
-        parent_l = parent_name.lower()
-
-        if not dialog.add_goal_name:
-            # что-то пошло не так
-            dialog.state = dialog.prev_state or dialog.state
-            dialog.prev_state = None
-            return edit_response("Ошибка: не запомнили имя новой цели.")
-
-        if not dialog.root:
-            return edit_response("Дерево целей ещё не построено.")
-
-        if parent_l not in dialog.goal_by_name:
-            return DialogResponse(
-                phase=dialog.phase,
-                state=dialog.state,
-                question=f"Родительская цель '{parent_name}' не найдена. Укажите существующую цель:",
-                tree=serialize_tree(dialog.root),
-                ose_results=dialog.factors_results,
-            )
-
-        parent_node = dialog.goal_by_name[parent_l]
-        if parent_node.level >= dialog.max_level:
-            return DialogResponse(
-                phase=dialog.phase,
-                state=dialog.state,
-                question=(
-                    f"Цель '{parent_node.name}' уже на максимальной глубине. "
-                    f"Укажите другую родительскую цель:"
-                ),
-                tree=serialize_tree(dialog.root),
-                ose_results=dialog.factors_results,
-            )
-
-        new_name = dialog.add_goal_name
-        new_l = new_name.lower()
-
-        if new_l in dialog.used_names:
-            dialog.state = dialog.prev_state or dialog.state
-            dialog.prev_state = None
-            dialog.add_goal_name = None
-            return edit_response("Такое имя уже используется.")
-
-        child = parent_node.add_child(new_name)
-        dialog.goal_by_name[new_l] = child
-        dialog.used_names.add(new_l)
-        _recalc_levels(dialog.root)
-        _rebuild_goals_ordered()
-
-        dialog.add_goal_current_goal = child
-
-        # если факторов нет — просто выходим
-        if not dialog.factor_set:
-            dialog.state = dialog.prev_state or dialog.state
-            dialog.prev_state = None
-            dialog.add_goal_name = None
-            return edit_response(
-                f"Цель '{child.name}' добавлена как подцель '{parent_node.name}'.\n"
-                "Факторы пока не заданы."
-            )
-
-        dialog.state = "add_goal_ask_use_factors"
-
-        return DialogResponse(
-            phase=dialog.phase,
-            state=dialog.state,
-            question=(
-                f"Цель '{child.name}' добавлена как подцель '{parent_node.name}'.\n"
-                "Хотите ввести значения факторов для этой цели? (да/нет)"
-            ),
-            tree=serialize_tree(dialog.root),
-            ose_results=dialog.factors_results,
-            message=f"Добавлена новая цель '{child.name}'.",
-        )
-
-    # --------------------------------------------------------
-    # 3) Мастер: добавленная цель → спросить, вводить ли факторы
-    # --------------------------------------------------------
-    if dialog.state == "add_goal_ask_use_factors":
-        if not dialog.add_goal_current_goal:
-            dialog.state = dialog.prev_state or dialog.state
-            dialog.prev_state = None
-            return edit_response("Ошибка: цель для ввода факторов не найдена.")
-
-        if text.lower().startswith("д"):  # да
-            # собираем список факторов в виде отображаемых имён
-            factors_map: dict[str, str] = {}
-            for r in dialog.factors_results:
-                fl = r["factor"].lower()
-                factors_map[fl] = r["factor"]
-            # на случай, если фактор_set есть, а результатов ещё нет
-            for fl in dialog.factor_set:
-                if fl not in factors_map:
-                    factors_map[fl] = fl
-
-            dialog.add_goal_factors_list = list(factors_map.values())
-            dialog.add_goal_factor_index = 0
-
-            if not dialog.add_goal_factors_list:
-                # факторов нет, выходим
-                dialog.state = dialog.prev_state or dialog.state
-                dialog.prev_state = None
-                return edit_response("Факторы отсутствуют, вводить нечего.")
-
-            dialog.state = "add_goal_factor_confirm"
-            return _ask_next_factor_confirm()
-
-        # нет — выходим из мастера
-        dialog.state = dialog.prev_state or dialog.state
-        dialog.prev_state = None
-        dialog.add_goal_name = None
-        dialog.add_goal_current_goal = None
-        dialog.add_goal_factors_list = []
-        dialog.add_goal_factor_index = 0
-        dialog.add_goal_current_factor = None
-        dialog.add_goal_tmp_p = None
-
-        return edit_response("Цель добавлена без ввода значений факторов.")
-
-    # --------------------------------------------------------
-    # 4) Мастер: "Хотите ввести значения для фактора F?" (да/нет)
-    # --------------------------------------------------------
-    if dialog.state == "add_goal_factor_confirm":
-        if not dialog.add_goal_current_goal:
-            dialog.state = dialog.prev_state or dialog.state
-            dialog.prev_state = None
-            return edit_response("Ошибка: нет текущей цели.")
-
-        if text.lower().startswith("д"):  # да
-            # переходим к вводу p
-            dialog.state = "add_goal_factor_p"
-            return DialogResponse(
-                phase=dialog.phase,
-                state=dialog.state,
-                question=(
-                    f"Введите p (0..1) для фактора '{dialog.add_goal_current_factor}' "
-                    f"и цели '{dialog.add_goal_current_goal.name}':"
-                ),
-                tree=serialize_tree(dialog.root),
-                ose_results=dialog.factors_results,
-            )
-
-        # нет — следующий фактор
-        dialog.add_goal_factor_index += 1
-        return _ask_next_factor_confirm()
-
-    # --------------------------------------------------------
-    # 5) Мастер: ввод p для фактора
-    # --------------------------------------------------------
-    if dialog.state == "add_goal_factor_p":
-        try:
-            p = float(text)
-        except ValueError:
-            return DialogResponse(
-                phase=dialog.phase,
-                state=dialog.state,
-                question="Некорректный ввод. Введите p (число от 0 до 1):",
-                tree=serialize_tree(dialog.root),
-                ose_results=dialog.factors_results,
-            )
-
-        if p < 0 or p > 1:
-            return DialogResponse(
-                phase=dialog.phase,
-                state=dialog.state,
-                question="p должно быть числом от 0 до 1. Введите p ещё раз:",
-                tree=serialize_tree(dialog.root),
-                ose_results=dialog.factors_results,
-            )
-
-        if p == 1:
-            return DialogResponse(
-                phase=dialog.phase,
-                state=dialog.state,
-                question="p не может быть равно 1. Введите значение меньше 1:",
-                tree=serialize_tree(dialog.root),
-                ose_results=dialog.factors_results,
-            )
-
-        dialog.add_goal_tmp_p = p
-        dialog.state = "add_goal_factor_q"
-
-        return DialogResponse(
-            phase=dialog.phase,
-            state=dialog.state,
-            question=(
-                f"Введите q (0..1) для фактора '{dialog.add_goal_current_factor}' "
-                f"и цели '{dialog.add_goal_current_goal.name}':"
-            ),
-            tree=serialize_tree(dialog.root),
-            ose_results=dialog.factors_results,
-        )
-
-    # --------------------------------------------------------
-    # 6) Мастер: ввод q для фактора
-    # --------------------------------------------------------
-    if dialog.state == "add_goal_factor_q":
-        import math
-
-        try:
-            q = float(text)
-        except ValueError:
-            return DialogResponse(
-                phase=dialog.phase,
-                state=dialog.state,
-                question="Некорректный ввод. Введите q (число от 0 до 1):",
-                tree=serialize_tree(dialog.root),
-                ose_results=dialog.factors_results,
-            )
-
-        if q < 0 or q > 1:
-            return DialogResponse(
-                phase=dialog.phase,
-                state=dialog.state,
-                question="q должно быть от 0 до 1. Введите q ещё раз:",
-                tree=serialize_tree(dialog.root),
-                ose_results=dialog.factors_results,
-            )
-
-        if q == 0:
-            return DialogResponse(
-                phase=dialog.phase,
-                state=dialog.state,
-                question="q = 0 означает отсутствие влияния. Введите q > 0:",
-                tree=serialize_tree(dialog.root),
-                ose_results=dialog.factors_results,
-            )
-
-        p = dialog.add_goal_tmp_p or 0.0
-        if p <= 0:
-            H = 0.0
-        else:
-            try:
-                H = -q * math.log(1 - p)
-            except ValueError:
-                H = 0.0
-
-        dialog.factors_results.append({
-            "goal": dialog.add_goal_current_goal.name,
-            "factor": dialog.add_goal_current_factor,
-            "H": round(H, 4),
-        })
-
-        # следующий фактор
-        dialog.add_goal_factor_index += 1
-        dialog.add_goal_tmp_p = None
-        dialog.state = "add_goal_factor_confirm"
-
-        return _ask_next_factor_confirm()
-
-    # если состояние не распознано — отдадим общее сообщение
-    return edit_response("Неизвестное состояние мастера редактирования.")
-
-
-def _ask_next_factor_confirm() -> DialogResponse:
-    """Шаг мастера: спросить, хотим ли вводить значения для следующего фактора."""
-    if dialog.add_goal_factor_index >= len(dialog.add_goal_factors_list):
-        # факторы закончились — выходим из мастера
-        goal_name = dialog.add_goal_current_goal.name if dialog.add_goal_current_goal else "цели"
-
-        dialog.state = dialog.prev_state or dialog.state
-        dialog.prev_state = None
-        dialog.add_goal_name = None
-        dialog.add_goal_current_goal = None
-        dialog.add_goal_factors_list = []
-        dialog.add_goal_factor_index = 0
-        dialog.add_goal_current_factor = None
-        dialog.add_goal_tmp_p = None
-
-        return edit_response(f"Ввод значений факторов для {goal_name} завершён.")
-
-    factor_name = dialog.add_goal_factors_list[dialog.add_goal_factor_index]
-    dialog.add_goal_current_factor = factor_name
-    dialog.state = "add_goal_factor_confirm"
-
-    return DialogResponse(
-        phase=dialog.phase,
-        state=dialog.state,
-        question=(
-            f"Хотите ввести значения для фактора '{factor_name}' "
-            f"для цели '{dialog.add_goal_current_goal.name}'? (да/нет)"
-        ),
-        tree=serialize_tree(dialog.root),
-        ose_results=dialog.factors_results,
-    )
+    handler = _COMMANDS.get(kind)
+    if not handler:
+        return edit_response("Неизвестная команда.")
+    return handler(cmd)
