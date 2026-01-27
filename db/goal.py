@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict
 
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from db.base import Base
@@ -32,6 +32,47 @@ class Goal(Base):
         back_populates="goals",
     )
 
+class Classifier(Base):
+    __tablename__ = "classifiers"
+
+    id = Column(Integer, primary_key=True)
+
+    scheme_id = Column(Integer, ForeignKey("schemes.id"), nullable=False)
+
+    # имя классификатора (например, "Канал", "Продукт")
+    name = Column(String, nullable=False)
+
+    # уровень иерархии, к которому относится классификатор (1..N)
+    level = Column(Integer, nullable=False, default=1)
+
+    __table_args__ = (
+        UniqueConstraint("scheme_id", "level", "name", name="uq_classifier_scheme_level_name"),
+    )
+
+    items = relationship(
+        "ClassifierItem",
+        back_populates="classifier",
+        cascade="all, delete-orphan",
+    )
+
+
+class ClassifierItem(Base):
+    __tablename__ = "classifier_items"
+
+    id = Column(Integer, primary_key=True)
+
+    classifier_id = Column(Integer, ForeignKey("classifiers.id"), nullable=False)
+
+    value = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("classifier_id", "value", name="uq_classifier_item_value"),
+    )
+
+    classifier = relationship(
+        "Classifier",
+        back_populates="items",
+    )
 
 class GoalNode:
     _id_counter = 1

@@ -6,7 +6,6 @@ from db.goal import GoalNode, serialize_tree, collect_goals
 def handle_adpacf(ans: str) -> DialogResponse:
     text = ans.strip()
 
-    # === Ввод главной цели ===
     if dialog.state == "ask_root":
         if not text:
             return DialogResponse(
@@ -40,12 +39,68 @@ def handle_adpacf(ans: str) -> DialogResponse:
             tree=serialize_tree(root),
         )
 
-    # === Вопрос: добавить подцель к текущей цели? ===
+    if dialog.state == "clf_pair_decide":
+        answer_low = text.lower()
+
+        if answer_low not in ("да", "нет"):
+            x, y = dialog.clf_pairs[dialog.clf_pair_idx]
+            return DialogResponse(
+                phase="adpacf",
+                state="clf_pair_decide",
+                question=f"{x} / {y} — добавить как подцель? (да/нет)",
+                tree=serialize_tree(dialog.root) if dialog.root else [],
+            )
+
+        parent = dialog.clf_parent_goal
+        if not parent:
+            dialog.state = "ask_add_subgoal"
+            return DialogResponse(
+                phase="adpacf",
+                state="ask_add_subgoal",
+                question=f"Добавить подцель для '{dialog.current_node.name}'? (да/нет)",
+                tree=serialize_tree(dialog.root) if dialog.root else [],
+            )
+
+        x, y = dialog.clf_pairs[dialog.clf_pair_idx]
+        name = f"{x} / {y}"
+
+        if answer_low == "да":
+            if parent.level >= dialog.max_level:
+                dialog.clf_pair_idx += 1
+            else:
+                if name.lower() not in dialog.used_names:
+                    child = parent.add_child(name)
+                    dialog.used_names.add(name.lower())
+                    dialog.goal_by_name[name.lower()] = child
+                dialog.clf_pair_idx += 1
+        else:
+            dialog.clf_pair_idx += 1
+
+        if dialog.clf_pair_idx >= len(dialog.clf_pairs):
+            dialog.clf_pairs = []
+            dialog.clf_pair_idx = 0
+            dialog.clf_parent_goal = None
+            dialog.state = "ask_add_subgoal"
+            dialog.current_node = parent
+            return DialogResponse(
+                phase="adpacf",
+                state="ask_add_subgoal",
+                question=f"Сочетания закончились. Добавить подцель для '{dialog.current_node.name}'? (да/нет)",
+                tree=serialize_tree(dialog.root) if dialog.root else [],
+            )
+
+        x, y = dialog.clf_pairs[dialog.clf_pair_idx]
+        return DialogResponse(
+            phase="adpacf",
+            state="clf_pair_decide",
+            question=f"{x} / {y} — добавить как подцель? (да/нет)",
+            tree=serialize_tree(dialog.root) if dialog.root else [],
+        )
+
     if dialog.state == "ask_add_subgoal":
         answer_low = text.lower()
 
         if answer_low == "да":
-            # проверяем глубину
             if dialog.current_node.level >= dialog.max_level:
                 return DialogResponse(
                     phase="adpacf",
@@ -66,7 +121,6 @@ def handle_adpacf(ans: str) -> DialogResponse:
                 tree=serialize_tree(dialog.root),
             )
 
-        # любой ответ, отличный от "да" — считаем "нет"
         if dialog.current_node.parent:
             dialog.current_node = dialog.current_node.parent
             return DialogResponse(
@@ -76,7 +130,6 @@ def handle_adpacf(ans: str) -> DialogResponse:
                 tree=serialize_tree(dialog.root),
             )
 
-        # мы в корне и ответ "нет" → переходим к ОСЭ
         dialog.phase = "adpose"
         dialog.state = "ask_factor_name"
         dialog.goals_ordered = collect_goals(dialog.root)
@@ -88,7 +141,6 @@ def handle_adpacf(ans: str) -> DialogResponse:
             tree=serialize_tree(dialog.root),
         )
 
-    # === Ввод названия подцели ===
     if dialog.state == "ask_subgoal_name":
         if not text:
             return DialogResponse(
@@ -120,7 +172,6 @@ def handle_adpacf(ans: str) -> DialogResponse:
             tree=serialize_tree(dialog.root),
         )
 
-    # fallback
     return DialogResponse(
         phase="adpacf",
         state="error",
