@@ -6,10 +6,10 @@ from db.goal import collect_goals, serialize_tree
 from db.session import SessionLocal
 from db.goals import (
     list_classifiers,
-    create_classifier,
     add_classifier_item,
     get_classifier_with_items,
     delete_classifier,
+    replace_goals_from_tree,
 )
 
 from api.adpose import _strip_summaries, _append_goal_summaries
@@ -19,16 +19,6 @@ def edit_response(text):
     return DialogResponse(
         phase=dialog.phase,
         state=dialog.state,
-        question=text,
-        tree=serialize_tree(dialog.root) if dialog.root else [],
-        ose_results=dialog.factors_results,
-        message=None,
-    )
-
-def edit_question(text, state=None):
-    return DialogResponse(
-        phase=dialog.phase,
-        state=state or dialog.state,
         question=text,
         tree=serialize_tree(dialog.root) if dialog.root else [],
         ose_results=dialog.factors_results,
@@ -291,7 +281,7 @@ def cmd_clf_use_two(cmd):
     dialog.state = "clf_pair_decide"
 
     x, y = dialog.clf_pairs[0]
-    return edit_question(f"{x} / {y} — добавить как подцель? (да/нет)")
+    return edit_response(f"{x} / {y} — добавить как подцель? (да/нет)")
 
 def cmd_clf_next_pair(_cmd):
     dialog.clf_pair_idx += 1
@@ -301,7 +291,7 @@ def cmd_clf_next_pair(_cmd):
         return edit_response("Сочетания закончились.")
 
     x, y = dialog.clf_pairs[dialog.clf_pair_idx]
-    return edit_question(f"{x} / {y} — добавить? (да/нет)", state="clf_pair_decide")
+    return edit_response(f"{x} / {y} — добавить? (да/нет)", state="clf_pair_decide")
 
 
 def cmd_clf_stop(_cmd):
@@ -335,7 +325,7 @@ def cmd_go_ose(_cmd):
         return edit_response("Сначала задайте дерево целей.")
     dialog.phase = "adpose"
     dialog.state = "ask_factor_name"
-    return edit_response("Переход к ОСЭ.")
+    return None
 
 
 def cmd_rename_goal(cmd):
@@ -377,14 +367,11 @@ def cmd_delete_goal(cmd):
         return edit_response("Цель не найдена.")
     if node.parent is None:
         return edit_response("Нельзя удалить корневую цель.")
-    # удалить из списка детей родителя
     node.parent.children = [ch for ch in node.parent.children if ch is not node]
-    # если текущий узел указывает на удалённое — откат
     if dialog.current_node is node:
         dialog.current_node = node.parent
     _rebuild_goal_maps()
     _persist_tree()
-    # удалить оценки ОСЭ по этой цели
     base = [r for r in _strip_summaries(dialog.factors_results) if str(r.get("goal", "")).lower() != node.name.lower()]
     dialog.factors_results = base
     dialog.factor_set = set(r.get("factor") for r in base if r.get("factor"))
@@ -412,7 +399,7 @@ def cmd_delete_classifier(cmd):
 def cmd_clear_ose(_cmd):
     dialog.factors_results = []
     dialog.factor_set = set()
-    dialog.current_factor_name = None
+    dialog.factor_name = None
     dialog._ose_goal = None
     dialog._p = None
     dialog._q = None

@@ -14,7 +14,7 @@ class DialogState:
         self.used_names = set()
         self.goal_by_name = {}
 
-        self.current_factor_name = None
+        self.factor_name = None
         self._ose_goal = None
         self._p = None
         self.factors_results = []
