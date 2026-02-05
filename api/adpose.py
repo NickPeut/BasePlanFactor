@@ -14,7 +14,6 @@ def _append_goal_summaries(rows: list[dict], root) -> list[dict]:
     root: корень дерева целей
     """
 
-    # 1) сумма H по факторам для каждой цели
     base_sum: dict[str, float] = {}
     for r in rows:
         try:
@@ -24,7 +23,6 @@ def _append_goal_summaries(rows: list[dict], root) -> list[dict]:
         g = r.get("goal", "") or ""
         base_sum[g] = base_sum.get(g, 0.0) + h
 
-    # 2) карта детей: goal_name -> [child_name, ...]
     children: dict[str, list[str]] = {}
 
     def walk(n):
@@ -37,7 +35,6 @@ def _append_goal_summaries(rows: list[dict], root) -> list[dict]:
 
     walk(root)
 
-    # 3) рекурсивная свёртка по поддереву
     total_sum: dict[str, float] = {}
 
     def fold(goal_name: str) -> float:
@@ -54,7 +51,6 @@ def _append_goal_summaries(rows: list[dict], root) -> list[dict]:
     for g in children.keys():
         fold(g)
 
-    # 4) собрать результат: сначала базовые строки, затем ΣH
     out = list(rows)
 
     for g, s in base_sum.items():

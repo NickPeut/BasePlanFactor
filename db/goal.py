@@ -39,10 +39,8 @@ class Classifier(Base):
 
     scheme_id = Column(Integer, ForeignKey("schemes.id"), nullable=False)
 
-    # имя классификатора (например, "Канал", "Продукт")
     name = Column(String, nullable=False)
 
-    # уровень иерархии, к которому относится классификатор (1..N)
     level = Column(Integer, nullable=False, default=1)
 
     __table_args__ = (

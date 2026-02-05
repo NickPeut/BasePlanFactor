@@ -95,7 +95,7 @@ def handle_adpacf(ans: str) -> DialogResponse:
             dialog.clfs = []
             dialog.clf_tmp_name = None
             dialog.clf_parent_goal = None
-            dialog.clf_indices = None  # текущие индексы комбинации
+            dialog.clf_indices = None
             dialog.clf_level = 1
 
             return DialogResponse(
@@ -181,7 +181,6 @@ def handle_adpacf(ans: str) -> DialogResponse:
         return parts
 
     def _clf_advance():
-        # "n вложенных циклов" без построения всего произведения
         for i in range(len(dialog.clf_indices) - 1, -1, -1):
             dialog.clf_indices[i] += 1
             if dialog.clf_indices[i] < len(dialog.clfs[i]["items"]):
@@ -240,7 +239,6 @@ def handle_adpacf(ans: str) -> DialogResponse:
                 except Exception:
                     session.rollback()
 
-            # актуализируем элементы из БД (источник истины)
             clf = get_classifier_with_items(session, scheme_id, dialog.clf_tmp_name, level=dialog.clf_level)
             all_items = [it.value for it in (clf.items or [])]
         finally:
@@ -279,7 +277,6 @@ def handle_adpacf(ans: str) -> DialogResponse:
                 tree=serialize_tree(dialog.root),
             )
 
-        # нет → переходим к выбору цели-родителя и перебору сочетаний
         if len(dialog.clfs) < 2:
             dialog.state = "clf_name"
             return DialogResponse(

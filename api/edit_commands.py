@@ -304,7 +304,6 @@ def cmd_help(_cmd):
 
 
 def cmd_finish(_cmd):
-    # не сбрасываем данные, только переводим в нейтральное состояние
     if dialog.root:
         dialog.phase = "adpacf"
         dialog.state = "after_classifiers"
@@ -325,7 +324,7 @@ def cmd_go_ose(_cmd):
         return edit_response("Сначала задайте дерево целей.")
     dialog.phase = "adpose"
     dialog.state = "ask_factor_name"
-    return None
+    return edit_response("Введите название фактора")
 
 
 def cmd_rename_goal(cmd):
