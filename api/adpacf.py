@@ -54,7 +54,7 @@ def _start_adpose() -> DialogResponse:
     dialog.phase = "adpose"
     dialog.state = "ask_factor_name"
     dialog.goals_ordered = collect_goals(dialog.root)
-    return _resp_phase("adpose", "ask_factor_name", "Введите название фактора (или 'завершить'):")
+    return _resp_phase("adpose", "ask_factor_name", "Введите название фактора:")
 
 
 def _find_goal(raw: str):
@@ -136,7 +136,7 @@ def _handle_ask_add_subgoal(text: str) -> DialogResponse:
                 (
                     f"Достигнут максимальный уровень ({dialog.max_level}). "
                     f"Подцель для '{dialog.current_node.name}' добавить нельзя. "
-                    "Ответьте 'нет', чтобы вернуться к родительской цели или завершить ввод дерева."
+                    "Ответьте 'нет', чтобы вернуться к родительской цели."
                 ),
             )
         dialog.state = "ask_subgoal_name"

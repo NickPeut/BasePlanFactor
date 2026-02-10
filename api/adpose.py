@@ -199,7 +199,7 @@ def _handle_ask_q(text: str) -> DialogResponse:
 
     return _resp(
         "ask_factor_name",
-        "Введите название следующего фактора (или пустую строку / 'завершить'):"
+        "Введите название следующего фактора:"
     )
 
 
@@ -210,7 +210,7 @@ def _handle_ask_more_goal_for_factor(text: str) -> DialogResponse:
         return _resp("ask_goal", "Введите название следующей цели для этого фактора:")
 
     dialog.state = "ask_factor_name"
-    return _resp("ask_factor_name", "Введите название следующего фактора (или пустую строку / 'завершить'):")
+    return _resp("ask_factor_name", "Введите название следующего фактора:")
 
 
 _HANDLERS = {
