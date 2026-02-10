@@ -304,12 +304,9 @@ def cmd_help(_cmd):
 
 
 def cmd_finish(_cmd):
-    if dialog.root:
-        dialog.phase = "ose"
-        dialog.state = "ask_factor_name"
-        return edit_response("Завершено.\n" + _help_text())
-    dialog.phase = "adpacf"
-    dialog.state = "ask_root"
+    scheme_id = dialog.active_scheme_id
+    dialog.__init__()
+    dialog.active_scheme_id = scheme_id
     return edit_response("Завершено.\n" + _help_text())
 
 

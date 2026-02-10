@@ -80,11 +80,14 @@ def _resp(state: str, question: str) -> DialogResponse:
 def _finish_ose() -> DialogResponse:
     dialog.state = "finish_ose"
     dialog.factors_results = _append_goal_summaries(_strip_summaries(dialog.factors_results), dialog.root)
-    return _resp("finish_ose", "Оценка факторов завершена.")
-
+    return _resp(
+        "finish_ose",
+        "ОСЭ завершена.\n"
+        "Введите 'команды' чтобы увидеть доступные действия."
+    )
 
 def _handle_ask_factor_name(text: str) -> DialogResponse:
-    if text == "":
+    if text == "" or text.lower() in ["завершить", "конец", "finish", "stop"]:
         return _finish_ose()
 
     if text.lower() in dialog.used_names:
@@ -199,7 +202,7 @@ def handle_adpose(ans: str) -> DialogResponse:
     text = ans.strip()
 
     if dialog.state == "finish_ose":
-        return _resp("finish_ose", "Оценка факторов завершена.")
+        return _resp("finish_ose", "ОСЭ завершена.\nВведите 'команды' чтобы увидеть доступные действия.")
 
     handler = _HANDLERS.get(dialog.state)
     if not handler:

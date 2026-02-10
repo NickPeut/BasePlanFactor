@@ -268,7 +268,7 @@ def _handle_clf_combo_decide(text: str) -> DialogResponse:
         dialog.clf_done = True
         dialog.clf_parent_goal = None
         dialog.clf_indices = None
-        dialog.phase = "ose"
+        dialog.phase = "adpose"
         dialog.state = "ask_factor_name"
         return _resp(
             "ask_factor_name",

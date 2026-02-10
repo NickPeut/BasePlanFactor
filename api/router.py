@@ -161,7 +161,44 @@ def start_dialog(scheme_id: Optional[int] = Query(None)):
 @router.post("/dialog/answer", response_model=DialogResponse)
 def process_answer(req: AnswerRequest):
     text = req.answer.strip()
-    if text.lower() in ["завершить", "конец", "finish", "stop"]:
+
+    if dialog.phase == "adpose" and dialog.state == "finish_ose":
+        cmd = try_parse_edit_command(text)
+        if cmd:
+            return handle_edit_command(cmd)
+        else:
+            return DialogResponse(
+                phase=dialog.phase,
+                state=dialog.state,
+                question="Введите команду. Доступные функции:\n"
+                "Схемы:\n"
+                "- создание схемы (кнопка/действие в UI)\n"
+                "- удаление схемы\n"
+                "- переключение схем\n\n"
+                "Дерево целей (АДПАЦФ):\n"
+                "- ввод главной цели\n"
+                "- добавление подцелей (да/нет)\n\n"
+                "Редактирование через чат:\n"
+                "- переименовать цель \"A\" в \"B\"\n"
+                "- удалить цель \"A\"\n\n"
+                "Классификаторы:\n"
+                "- добавь классификатор \"X\"\n"
+                "- добавь элемент \"A\" в классификатор \"X\"\n"
+                "- покажи классификаторы\n"
+                "- начать классификаторы для цели \"Y\"\n"
+                "- используй классификаторы \"X\" и \"Z\"\n"
+                "- следующее сочетание\n"
+                "- стоп классификаторы\n\n"
+                "ОСЭ:\n"
+                "- ввод факторов\n"
+                "- ввод p и q по целям\n"
+                "- расчёт H и вывод таблицы результатов",
+                tree=serialize_tree(dialog.root)
+                if dialog.root else [],
+                ose_results=dialog.factors_results,
+            )
+
+    '''if text.lower() in ["завершить", "конец", "finish", "stop"]:
         dialog.state = "idle"
         return DialogResponse(
             phase="adpose",
@@ -195,7 +232,7 @@ def process_answer(req: AnswerRequest):
             tree=serialize_tree(dialog.root),
             ose_results=dialog.factors_results,
         )
-
+    '''
     cmd = try_parse_edit_command(text)
     if cmd:
         return handle_edit_command(cmd)
