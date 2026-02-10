@@ -1,7 +1,7 @@
 from typing import Optional, Dict
 
-from fastapi import APIRouter, Query, Depends
-from core.auth import require_auth
+from fastapi import APIRouter
+
 from core.dialog_state import dialog
 from core.schemas import AnswerRequest, DialogResponse
 
@@ -19,7 +19,7 @@ from api.edit_commands import (
 
 
 
-router = APIRouter(prefix="/api", dependencies=[Depends(require_auth)])
+router = APIRouter(prefix="/api")
 
 
 def _ensure_active_scheme_id() -> int:

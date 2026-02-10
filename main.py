@@ -35,9 +35,6 @@ if AUTH_ENABLED:
         if request.method == "HEAD":
             return await call_next(request)
 
-        if request.url.path.startswith("/static"):
-            return await call_next(request)
-
         auth_header = request.headers.get("Authorization")
         if not auth_header:
             return Response(
