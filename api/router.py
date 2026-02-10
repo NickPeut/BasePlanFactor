@@ -1,6 +1,5 @@
 from typing import Optional, Dict
-
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from core.dialog_state import dialog
 from core.schemas import AnswerRequest, DialogResponse
