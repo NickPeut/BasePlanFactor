@@ -1,7 +1,8 @@
 import math
 from core.dialog_state import dialog
 from core.schemas import DialogResponse
-from db.goal import serialize_tree
+from db.goal import serialize_tree, collect_goals
+
 
 def _strip_summaries(rows: list[dict]) -> list[dict]:
     return [r for r in (rows or []) if not str(r.get("factor", "")).startswith("ΣH ")]
@@ -97,8 +98,16 @@ def _handle_ask_factor_name(text: str) -> DialogResponse:
     dialog.factor_set.add(text.lower())
     dialog.used_names.add(text.lower())
 
-    dialog.state = "ask_goal"
-    return _resp("ask_goal", "Введите название цели, для которой оцениваем этот фактор:")
+    dialog.factor_name = text
+    dialog.factor_set.add(text.lower())
+    dialog.used_names.add(text.lower())
+
+    dialog.ose_goals = collect_goals(dialog.root)
+    dialog.ose_goal_idx = 0
+    dialog._ose_goal = dialog.ose_goals[0]
+    dialog._p = None
+    dialog.state = "ask_p"
+    return _resp("ask_p", f"Введите p (0..1) для цели '{dialog._ose_goal.name}':")
 
 
 def _find_goal_by_input(raw: str):
@@ -153,30 +162,45 @@ def _handle_ask_q(text: str) -> DialogResponse:
     try:
         q = float(text)
     except ValueError:
-        return _resp("ask_q", "Некорректный ввод. Введите q (число от 0 до 1):")
+        return _resp("ask_q", "Введите q числом (0..1):")
 
-    if q < 0 or q > 1:
-        return _resp("ask_q", "q должно быть от 0 до 1. Введите q ещё раз:")
+    if not (0 <= q <= 1):
+        return _resp("ask_q", "q должно быть в диапазоне [0..1]:")
+
+    dialog._q = q
 
     p = dialog._p
-    goal = dialog._ose_goal
+    H = -q * math.log(1 - p) if p < 1 else 0
 
-    H = calculate_ose(p, q)
+    dialog.factors_results.append({
+        "goal": dialog._ose_goal.name,
+        "factor": dialog.current_factor_name,
+        "p": p,
+        "q": q,
+        "H": H,
+    })
 
-    base = _strip_summaries(dialog.factors_results)
-    base.append(
-        {
-            "goal": goal.name,
-            "factor": dialog.current_factor_name,
-            "p": round(p, 4),
-            "q": round(q, 4),
-            "H": round(H, 4),
-        }
+    nxt = dialog.ose_goal_idx + 1
+    if nxt < len(dialog.ose_goals):
+        dialog.ose_goal_idx = nxt
+        dialog._ose_goal = dialog.ose_goals[nxt]
+        dialog._p = None
+        dialog._q = None
+        dialog.state = "ask_p"
+        return _resp(
+            "ask_p",
+            f"Введите p (0..1) для цели '{dialog._ose_goal.name}':"
+        )
+
+    dialog.state = "ask_factor_name"
+    dialog._ose_goal = None
+    dialog._p = None
+    dialog._q = None
+
+    return _resp(
+        "ask_factor_name",
+        "Введите название следующего фактора (или пустую строку / 'завершить'):"
     )
-    dialog.factors_results = _append_goal_summaries(base, dialog.root)
-
-    dialog.state = "ask_more_goal_for_factor"
-    return _resp("ask_more_goal_for_factor", "Оценить этот же фактор для другой цели? (да/нет)")
 
 
 def _handle_ask_more_goal_for_factor(text: str) -> DialogResponse:

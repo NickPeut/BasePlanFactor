@@ -18,6 +18,8 @@ class DialogState:
         self._ose_goal = None
         self._p = None
         self.factors_results = []
+        self.ose_goals = []
+        self.ose_goal_idx = 0
         self.factor_set = set()
 
         self.clfs = []
