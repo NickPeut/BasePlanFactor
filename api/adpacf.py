@@ -268,39 +268,15 @@ def _handle_clf_combo_decide(text: str) -> DialogResponse:
         dialog.clf_done = True
         dialog.clf_parent_goal = None
         dialog.clf_indices = None
-        dialog.state = "after_classifiers"
+        dialog.phase = "ose"
+        dialog.state = "ask_factor_name"
         return _resp(
-            "after_classifiers",
-            (
-                "Структуризация по классификаторам завершена.\n"
-                "Введите:\n"
-                "- 'классификаторы' чтобы построить уровень для другой цели\n"
-                "- 'осэ' чтобы перейти к оценке факторов\n"
-                "- 'дерево' чтобы вернуться к ручному добавлению подцелей"
-            ),
+            "ask_factor_name",
+            "Введите название фактора:",
         )
 
     combo_s = " / ".join(_clf_combo_text())
     return _resp("clf_combo_decide", f"Сочетание ⟨{combo_s}⟩ включить как подцель? (да/нет)")
-
-
-def _handle_after_classifiers(text: str) -> DialogResponse:
-    cmd = text.lower()
-
-    if cmd in ("осэ", "ose", "adpose"):
-        return _start_adpose()
-
-    if cmd in ("дерево", "tree"):
-        dialog.state = "ask_add_subgoal"
-        dialog.current_node = dialog.root
-        return _resp("ask_add_subgoal", f"Добавить подцель для '{dialog.current_node.name}'? (да/нет)")
-
-    if cmd in ("классификаторы", "классификатор", "cls"):
-        dialog.clf_done = False
-        return _init_classifiers()
-
-    return _resp("after_classifiers", "Введите 'классификаторы' или 'осэ' или 'дерево'.")
-
 
 _HANDLERS = {
     "ask_root": _handle_ask_root,
@@ -311,7 +287,6 @@ _HANDLERS = {
     "clf_more": _handle_clf_more,
     "clf_parent_goal": _handle_clf_parent_goal,
     "clf_combo_decide": _handle_clf_combo_decide,
-    "after_classifiers": _handle_after_classifiers,
 }
 
 

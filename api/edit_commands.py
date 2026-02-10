@@ -305,8 +305,8 @@ def cmd_help(_cmd):
 
 def cmd_finish(_cmd):
     if dialog.root:
-        dialog.phase = "adpacf"
-        dialog.state = "after_classifiers"
+        dialog.phase = "ose"
+        dialog.state = "ask_factor_name"
         return edit_response("Завершено.\n" + _help_text())
     dialog.phase = "adpacf"
     dialog.state = "ask_root"
