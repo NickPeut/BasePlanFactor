@@ -299,21 +299,26 @@ def cmd_clf_stop(_cmd):
     dialog.clf_parent_goal = None
     dialog.state = "ask_add_subgoal"
     return edit_response("Режим классификаторов остановлен.")
+
+
+def menu_question():
+    return "Введите команду:\n" + _help_text()
+
+
 def cmd_help(_cmd):
-    return edit_response(_help_text())
-
-
-def cmd_finish(_cmd):
-    scheme_id = dialog.active_scheme_id
-    dialog.__init__()
-    dialog.active_scheme_id = scheme_id
-    return edit_response("Завершено.\n" + _help_text())
+    dialog.phase = "menu"
+    dialog.state = "menu"
+    return edit_response(menu_question())
 
 
 def cmd_go_tree(_cmd):
     dialog.phase = "adpacf"
     dialog.state = "ask_add_subgoal" if dialog.root else "ask_root"
-    return edit_response("Переход к целям.")
+
+    if dialog.state == "ask_root":
+        return edit_response("Введите главную цель:")
+
+    return edit_response(f"Добавить подцель для '{dialog.current_node.name}'? (да/нет)")
 
 
 def cmd_go_ose(_cmd):
@@ -321,7 +326,7 @@ def cmd_go_ose(_cmd):
         return edit_response("Сначала задайте дерево целей.")
     dialog.phase = "adpose"
     dialog.state = "ask_factor_name"
-    return edit_response("Введите название фактора")
+    return edit_response("Введите название фактора:")
 
 
 def cmd_rename_goal(cmd):
@@ -425,7 +430,6 @@ def cmd_delete_factor(cmd):
 
 _COMMANDS = {
     "help": cmd_help,
-    "finish": cmd_finish,
     "go_tree": cmd_go_tree,
     "go_ose": cmd_go_ose,
     "rename_goal": cmd_rename_goal,

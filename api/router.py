@@ -13,7 +13,7 @@ from api.adpacf import handle_adpacf
 from api.adpose import handle_adpose, _append_goal_summaries, _strip_summaries
 from api.edit_commands import (
     try_parse_edit_command,
-    handle_edit_command,
+    handle_edit_command, menu_question,
 )
 
 
@@ -153,8 +153,9 @@ def start_dialog(scheme_id: Optional[int] = Query(None)):
     if root:
         dialog.root = root
         dialog.current_node = root
-        dialog.phase = "adpacf"
-        dialog.state = "ask_add_subgoal"
+
+        dialog.phase = "menu"
+        dialog.state = "menu"
 
         dialog.used_names = set()
         dialog.goal_by_name = {}
@@ -166,7 +167,7 @@ def start_dialog(scheme_id: Optional[int] = Query(None)):
         return DialogResponse(
             phase=dialog.phase,
             state=dialog.state,
-            question=f"Схема загружена из БД. Добавить подцель для '{dialog.current_node.name}'? (да/нет)",
+            question=menu_question(),
             tree=serialize_tree(dialog.root),
             ose_results=dialog.factors_results,
         )
@@ -185,58 +186,29 @@ def start_dialog(scheme_id: Optional[int] = Query(None)):
 def process_answer(req: AnswerRequest):
     text = req.answer.strip()
 
-    if dialog.phase == "adpose" and dialog.state == "finish_ose":
+    if dialog.phase == "menu" and dialog.state == "menu":
         cmd = try_parse_edit_command(text)
         if cmd:
             return handle_edit_command(cmd)
-        else:
-            return DialogResponse(
-                phase=dialog.phase,
-                state=dialog.state,
-                question="Введите команду. Доступные функции:\n"
-                "Схемы:\n"
-                "- создание схемы (кнопка/действие в UI)\n"
-                "- удаление схемы\n"
-                "- переключение схем\n\n"
-                "Дерево целей (АДПАЦФ):\n"
-                "- ввод главной цели\n"
-                "- добавление подцелей (да/нет)\n\n"
-                "Редактирование через чат:\n"
-                "- переименовать цель \"A\" в \"B\"\n"
-                "- удалить цель \"A\"\n\n"
-                "Классификаторы:\n"
-                "- добавь классификатор \"X\"\n"
-                "- добавь элемент \"A\" в классификатор \"X\"\n"
-                "- покажи классификаторы\n"
-                "- начать классификаторы для цели \"Y\"\n"
-                "- используй классификаторы \"X\" и \"Z\"\n"
-                "- следующее сочетание\n"
-                "- стоп классификаторы\n\n"
-                "ОСЭ:\n"
-                "- ввод факторов\n"
-                "- ввод p и q по целям\n"
-                "- расчёт H и вывод таблицы результатов",
-                tree=serialize_tree(dialog.root) if dialog.root else [],
-                ose_results=dialog.factors_results,
-            )
+
+        return DialogResponse(
+            phase="menu",
+            state="menu",
+            question=menu_question(),
+            tree=serialize_tree(dialog.root) if dialog.root else [],
+            ose_results=dialog.factors_results,
+        )
 
     if dialog.phase == "adpacf":
         resp = handle_adpacf(text)
 
         if dialog.state == "finish_adpacf":
-            dialog.phase = "adpose"
-            dialog.state = "ask_factor_name"
-            dialog.current_factor_name = None
-            dialog._ose_goal = None
-            dialog._p = None
-            dialog._q = None
-            dialog.ose_goals = []
-            dialog.ose_goal_idx = 0
-
+            dialog.phase = "menu"
+            dialog.state = "menu"
             return DialogResponse(
-                phase="adpose",
-                state="ask_factor_name",
-                question="Введите название фактора:",
+                phase="menu",
+                state="menu",
+                question=menu_question(),
                 tree=serialize_tree(dialog.root) if dialog.root else [],
                 ose_results=dialog.factors_results,
             )
@@ -244,12 +216,17 @@ def process_answer(req: AnswerRequest):
         return resp
 
     if dialog.phase == "adpose":
-        return handle_adpose(text)
+        resp = handle_adpose(text)
 
-    return DialogResponse(
-        phase=dialog.phase,
-        state="error",
-        question="Ошибка состояния диалога.",
-        tree=serialize_tree(dialog.root) if dialog.root else [],
-        ose_results=dialog.factors_results,
-    )
+        if dialog.state == "finish_ose":
+            dialog.phase = "menu"
+            dialog.state = "menu"
+            return DialogResponse(
+                phase="menu",
+                state="menu",
+                question=menu_question(),
+                tree=serialize_tree(dialog.root) if dialog.root else [],
+                ose_results=dialog.factors_results,
+            )
+
+        return resp
