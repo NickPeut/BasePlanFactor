@@ -15,3 +15,15 @@ class Scheme(Base):
         back_populates="scheme",
         cascade="all, delete-orphan",
     )
+
+    classifiers = relationship(
+        "Classifier",
+        back_populates="scheme",
+        cascade="all, delete-orphan",
+    )
+
+    ose_results = relationship(
+        "OseResult",
+        back_populates="scheme",
+        cascade="all, delete-orphan",
+    )

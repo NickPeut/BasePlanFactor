@@ -1,7 +1,7 @@
 from core.dialog_state import dialog
 from core.schemas import DialogResponse
 
-from db.goal import GoalNode, serialize_tree, collect_goals
+from db.goal import GoalNode, serialize_tree
 from db.session import SessionLocal
 from db.goals import (
     get_classifier_with_items,
@@ -31,15 +31,6 @@ def _resp(state: str, question: str) -> DialogResponse:
     )
 
 
-def _resp_phase(phase: str, state: str, question: str) -> DialogResponse:
-    return DialogResponse(
-        phase=phase,
-        state=state,
-        question=question,
-        tree=serialize_tree(dialog.root) if dialog.root else [],
-    )
-
-
 def _init_classifiers() -> DialogResponse:
     dialog.state = "clf_name"
     dialog.clfs = []
@@ -48,13 +39,6 @@ def _init_classifiers() -> DialogResponse:
     dialog.clf_indices = None
     dialog.clf_level = 1
     return _resp("clf_name", "Введите название классификатора (признака структуризации).")
-
-
-def _start_adpose() -> DialogResponse:
-    dialog.phase = "adpose"
-    dialog.state = "ask_factor_name"
-    dialog.goals_ordered = collect_goals(dialog.root)
-    return _resp_phase("adpose", "ask_factor_name", "Введите название фактора:")
 
 
 def _find_goal(raw: str):
@@ -149,7 +133,8 @@ def _handle_ask_add_subgoal(text: str) -> DialogResponse:
     if not getattr(dialog, "clf_done", False):
         return _init_classifiers()
 
-    return _start_adpose()
+    dialog.state = "finish_adpacf"
+    return _resp("finish_adpacf", "Этап АДПАЦФ завершён. Переходим к ОСЭ.")
 
 
 def _handle_ask_subgoal_name(text: str) -> DialogResponse:
@@ -268,15 +253,12 @@ def _handle_clf_combo_decide(text: str) -> DialogResponse:
         dialog.clf_done = True
         dialog.clf_parent_goal = None
         dialog.clf_indices = None
-        dialog.phase = "adpose"
-        dialog.state = "ask_factor_name"
-        return _resp(
-            "ask_factor_name",
-            "Введите название фактора:",
-        )
+        dialog.state = "finish_adpacf"
+        return _resp("finish_adpacf", "Классификаторы завершены. Переходим к ОСЭ.")
 
     combo_s = " / ".join(_clf_combo_text())
     return _resp("clf_combo_decide", f"Сочетание ⟨{combo_s}⟩ включить как подцель? (да/нет)")
+
 
 _HANDLERS = {
     "ask_root": _handle_ask_root,

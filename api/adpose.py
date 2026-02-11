@@ -2,6 +2,8 @@ import math
 from core.dialog_state import dialog
 from core.schemas import DialogResponse
 from db.goal import serialize_tree, collect_goals
+from db.goals import replace_ose_results
+from db.session import SessionLocal
 
 
 def _strip_summaries(rows: list[dict]) -> list[dict]:
@@ -84,61 +86,32 @@ def _finish_ose() -> DialogResponse:
     return _resp(
         "finish_ose",
         "ОСЭ завершена.\n"
-        "Введите 'команды' чтобы увидеть доступные действия."
+        "Введите 'команды' чтобы увидеть доступные действия.",
     )
+
 
 def _handle_ask_factor_name(text: str) -> DialogResponse:
     if text == "" or text.lower() in ["завершить", "конец", "finish", "stop"]:
         return _finish_ose()
 
-    if text.lower() in dialog.used_names:
+    if text.lower() in dialog.factor_set:
         return _resp("ask_factor_name", "Фактор с таким названием уже существует. Введите другое название:")
 
     dialog.current_factor_name = text
     dialog.factor_set.add(text.lower())
-    dialog.used_names.add(text.lower())
-
-    dialog.factor_name = text
-    dialog.factor_set.add(text.lower())
-    dialog.used_names.add(text.lower())
 
     dialog.ose_goals = collect_goals(dialog.root)
     dialog.ose_goal_idx = 0
+
+    if not dialog.ose_goals:
+        dialog.state = "ask_factor_name"
+        return _resp("ask_factor_name", "Нет целей-листьев для оценки. Введите название фактора ещё раз:")
+
     dialog._ose_goal = dialog.ose_goals[0]
     dialog._p = None
+    dialog._q = None
     dialog.state = "ask_p"
     return _resp("ask_p", f"Введите p (0..1) для цели '{dialog._ose_goal.name}':")
-
-
-def _find_goal_by_input(raw: str):
-    raw = raw.strip()
-    if raw.isdigit():
-        target_id = int(raw)
-
-        def _find_by_id(n):
-            if not n:
-                return None
-            if getattr(n, "id", None) == target_id:
-                return n
-            for ch in getattr(n, "children", []) or []:
-                got = _find_by_id(ch)
-                if got:
-                    return got
-            return None
-
-        return _find_by_id(dialog.root)
-
-    return dialog.goal_by_name.get(raw.lower())
-
-
-def _handle_ask_goal(text: str) -> DialogResponse:
-    goal = _find_goal_by_input(text)
-    if goal is None:
-        return _resp("ask_goal", "Цель не найдена. Введите название цели точно как в дереве:")
-
-    dialog._ose_goal = goal
-    dialog.state = "ask_p"
-    return _resp("ask_p", f"Введите p (0..1) для цели '{goal.name}':")
 
 
 def _handle_ask_p(text: str) -> DialogResponse:
@@ -158,6 +131,17 @@ def _handle_ask_p(text: str) -> DialogResponse:
     return _resp("ask_q", f"Введите q (0..1) для цели '{dialog._ose_goal.name}':")
 
 
+def _persist_ose():
+    scheme_id = getattr(dialog, "active_scheme_id", None)
+    if scheme_id is None:
+        return
+    session = SessionLocal()
+    try:
+        replace_ose_results(session, scheme_id, _strip_summaries(dialog.factors_results))
+    finally:
+        session.close()
+
+
 def _handle_ask_q(text: str) -> DialogResponse:
     try:
         q = float(text)
@@ -170,15 +154,17 @@ def _handle_ask_q(text: str) -> DialogResponse:
     dialog._q = q
 
     p = dialog._p
-    H = -q * math.log(1 - p) if p < 1 else 0
+    H = calculate_ose(p, q)
 
-    dialog.factors_results.append({
-        "goal": dialog._ose_goal.name,
-        "factor": dialog.current_factor_name,
-        "p": p,
-        "q": q,
-        "H": H,
-    })
+    dialog.factors_results.append(
+        {
+            "goal": dialog._ose_goal.name,
+            "factor": dialog.current_factor_name,
+            "p": p,
+            "q": q,
+            "H": H,
+        }
+    )
 
     nxt = dialog.ose_goal_idx + 1
     if nxt < len(dialog.ose_goals):
@@ -187,38 +173,20 @@ def _handle_ask_q(text: str) -> DialogResponse:
         dialog._p = None
         dialog._q = None
         dialog.state = "ask_p"
-        return _resp(
-            "ask_p",
-            f"Введите p (0..1) для цели '{dialog._ose_goal.name}':"
-        )
+        return _resp("ask_p", f"Введите p (0..1) для цели '{dialog._ose_goal.name}':")
 
     dialog.state = "ask_factor_name"
     dialog._ose_goal = None
     dialog._p = None
     dialog._q = None
 
-    return _resp(
-        "ask_factor_name",
-        "Введите название следующего фактора:"
-    )
-
-
-def _handle_ask_more_goal_for_factor(text: str) -> DialogResponse:
-    a = text.lower()
-    if a == "да":
-        dialog.state = "ask_goal"
-        return _resp("ask_goal", "Введите название следующей цели для этого фактора:")
-
-    dialog.state = "ask_factor_name"
-    return _resp("ask_factor_name", "Введите название следующего фактора:")
+    return _resp("ask_factor_name", "Введите название следующего фактора (или пустую строку / 'завершить'):")
 
 
 _HANDLERS = {
     "ask_factor_name": _handle_ask_factor_name,
-    "ask_goal": _handle_ask_goal,
     "ask_p": _handle_ask_p,
     "ask_q": _handle_ask_q,
-    "ask_more_goal_for_factor": _handle_ask_more_goal_for_factor,
 }
 
 

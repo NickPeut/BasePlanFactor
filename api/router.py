@@ -6,11 +6,11 @@ from core.schemas import AnswerRequest, DialogResponse
 
 from db.session import SessionLocal
 from db.goal import GoalNode, serialize_tree, collect_goals
-from db.goals import get_all_goals
+from db.goals import get_all_goals, get_ose_results
 from db.schemes import list_schemes, create_scheme, delete_scheme
 
 from api.adpacf import handle_adpacf
-from api.adpose import handle_adpose
+from api.adpose import handle_adpose, _append_goal_summaries, _strip_summaries
 from api.edit_commands import (
     try_parse_edit_command,
     handle_edit_command,
@@ -47,6 +47,7 @@ def _load_tree_from_db(scheme_id: int) -> Optional[GoalNode]:
         if not goals:
             return None
 
+        goals = sorted(goals, key=lambda g: g.id)
         nodes: Dict[int, GoalNode] = {}
         for g in goals:
             node = GoalNode(g.name)
@@ -55,16 +56,28 @@ def _load_tree_from_db(scheme_id: int) -> Optional[GoalNode]:
 
         root: Optional[GoalNode] = None
         for g in goals:
-            if g.parent_id is None:
+            if g.parent_id is None and root is None:
                 root = nodes[g.id]
             else:
                 parent = nodes.get(g.parent_id)
                 if parent:
-                    parent.children.append(nodes[g.id])
+                    child = nodes[g.id]
+                    child.parent = parent
+                    parent.children.append(child)
+
+        def _fix_levels(n: GoalNode, lvl: int = 1):
+            n.level = lvl
+            for ch in getattr(n, "children", []) or []:
+                ch.parent = n
+                _fix_levels(ch, lvl + 1)
+
+        if root:
+            _fix_levels(root, 1)
 
         GoalNode._id_counter = (max(nodes.keys()) + 1) if nodes else 1
 
         return root
+
     finally:
         session.close()
 
@@ -125,7 +138,17 @@ def start_dialog(scheme_id: Optional[int] = Query(None)):
         dialog.active_scheme_id = scheme_id
     else:
         _ensure_active_scheme_id()
+
     root = _load_tree_from_db(dialog.active_scheme_id)
+
+    session = SessionLocal()
+    try:
+        base = get_ose_results(session, dialog.active_scheme_id)
+    finally:
+        session.close()
+
+    dialog.factors_results = _append_goal_summaries(_strip_summaries(base), root) if root else base
+    dialog.factor_set = set(str(r.get("factor", "")).lower() for r in _strip_summaries(dialog.factors_results) if r.get("factor"))
 
     if root:
         dialog.root = root
@@ -193,16 +216,32 @@ def process_answer(req: AnswerRequest):
                 "- ввод факторов\n"
                 "- ввод p и q по целям\n"
                 "- расчёт H и вывод таблицы результатов",
-                tree=serialize_tree(dialog.root)
-                if dialog.root else [],
+                tree=serialize_tree(dialog.root) if dialog.root else [],
                 ose_results=dialog.factors_results,
             )
-    cmd = try_parse_edit_command(text)
-    if cmd:
-        return handle_edit_command(cmd)
 
     if dialog.phase == "adpacf":
-        return handle_adpacf(text)
+        resp = handle_adpacf(text)
+
+        if dialog.state == "finish_adpacf":
+            dialog.phase = "adpose"
+            dialog.state = "ask_factor_name"
+            dialog.current_factor_name = None
+            dialog._ose_goal = None
+            dialog._p = None
+            dialog._q = None
+            dialog.ose_goals = []
+            dialog.ose_goal_idx = 0
+
+            return DialogResponse(
+                phase="adpose",
+                state="ask_factor_name",
+                question="Введите название фактора:",
+                tree=serialize_tree(dialog.root) if dialog.root else [],
+                ose_results=dialog.factors_results,
+            )
+
+        return resp
 
     if dialog.phase == "adpose":
         return handle_adpose(text)

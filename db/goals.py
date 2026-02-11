@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
 
-from .goal import Goal, Classifier, ClassifierItem, GoalNode
+from .goal import Goal, Classifier, ClassifierItem, GoalNode, OseResult
 
 
 def get_root_goal(session: Session) -> Goal | None:
@@ -103,4 +103,45 @@ def replace_goals_from_tree(session: Session, scheme_id: int, root: GoalNode | N
             _create(ch, g.id)
 
     _create(root, None)
+    session.commit()
+def get_ose_results(session: Session, scheme_id: int) -> list[dict]:
+    items = (
+        session.query(OseResult)
+        .filter(OseResult.scheme_id == scheme_id)
+        .order_by(OseResult.goal.asc(), OseResult.factor.asc())
+        .all()
+    )
+    return [
+        {"goal": x.goal, "factor": x.factor, "p": x.p, "q": x.q, "H": x.h}
+        for x in items
+    ]
+
+
+def replace_ose_results(session: Session, scheme_id: int, rows: list[dict]) -> None:
+    session.query(OseResult).filter(
+        OseResult.scheme_id == scheme_id,
+    ).delete(synchronize_session=False)
+
+    for r in rows or []:
+        goal = (r.get("goal") or "").strip()
+        factor = (r.get("factor") or "").strip()
+        if not goal or not factor:
+            continue
+        try:
+            p = float(r.get("p"))
+            q = float(r.get("q"))
+            h = float(r.get("H"))
+        except Exception:
+            continue
+        session.add(
+            OseResult(
+                scheme_id=scheme_id,
+                goal=goal,
+                factor=factor,
+                p=p,
+                q=q,
+                h=h,
+            )
+        )
+
     session.commit()

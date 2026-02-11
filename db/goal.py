@@ -1,10 +1,9 @@
 from typing import Optional, List, Dict
 
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Float
 from sqlalchemy.orm import relationship
 
 from db.base import Base
-
 
 class Goal(Base):
     __tablename__ = "goals"
@@ -47,12 +46,42 @@ class Classifier(Base):
         UniqueConstraint("scheme_id", "level", "name", name="uq_classifier_scheme_level_name"),
     )
 
+    scheme = relationship(
+        "Scheme",
+        back_populates="classifiers",
+    )
+
     items = relationship(
         "ClassifierItem",
         back_populates="classifier",
         cascade="all, delete-orphan",
     )
 
+class OseResult(Base):
+    __tablename__ = "ose_results"
+
+    id = Column(Integer, primary_key=True)
+
+    scheme_id = Column(Integer, ForeignKey("schemes.id"), nullable=False)
+
+    goal = Column(String, nullable=False)
+
+    factor = Column(String, nullable=False)
+
+    p = Column(Float, nullable=False)
+
+    q = Column(Float, nullable=False)
+
+    h = Column(Float, nullable=False)
+
+    scheme = relationship(
+        "Scheme",
+        back_populates="ose_results",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("scheme_id", "goal", "factor", name="uq_ose_scheme_goal_factor"),
+    )
 
 class ClassifierItem(Base):
     __tablename__ = "classifier_items"

@@ -9,7 +9,7 @@ from db.goals import (
     add_classifier_item,
     get_classifier_with_items,
     delete_classifier,
-    replace_goals_from_tree,
+    replace_goals_from_tree, replace_ose_results,
 )
 
 from api.adpose import _strip_summaries, _append_goal_summaries
@@ -356,6 +356,17 @@ def _find_goal_token(token: str):
     return dialog.goal_by_name.get(t.lower())
 
 
+def _persist_ose():
+    scheme_id = getattr(dialog, "active_scheme_id", None)
+    if scheme_id is None:
+        return
+    session = SessionLocal()
+    try:
+        replace_ose_results(session, scheme_id, _strip_summaries(dialog.factors_results))
+    finally:
+        session.close()
+
+
 def cmd_delete_goal(cmd):
     token = cmd[1]
     node = _find_goal_token(token)
@@ -395,10 +406,11 @@ def cmd_delete_classifier(cmd):
 def cmd_clear_ose(_cmd):
     dialog.factors_results = []
     dialog.factor_set = set()
-    dialog.factor_name = None
+    dialog.current_factor_name = None
     dialog._ose_goal = None
     dialog._p = None
     dialog._q = None
+    _persist_ose()
     return edit_response("ОСЭ очищено.")
 
 def cmd_delete_factor(cmd):
@@ -408,6 +420,7 @@ def cmd_delete_factor(cmd):
     dialog.factors_results = base2
     dialog.factor_set = set(r.get("factor") for r in base2 if r.get("factor"))
     _recalc_ose_results()
+    _persist_ose()
     return edit_response("Фактор удалён.")
 
 _COMMANDS = {

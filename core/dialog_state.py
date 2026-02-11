@@ -14,9 +14,10 @@ class DialogState:
         self.used_names = set()
         self.goal_by_name = {}
 
-        self.factor_name = None
+        self.current_factor_name = None
         self._ose_goal = None
         self._p = None
+        self._q = None
         self.factors_results = []
         self.ose_goals = []
         self.ose_goal_idx = 0
@@ -38,14 +39,6 @@ class DialogState:
         self.add_goal_factor_index = 0
         self.add_goal_current_factor = None
         self.add_goal_tmp_p = None
-
-        self.clf_state: str | None = None
-        self.clf_level: int = 1
-        self.clf_parent_goal: GoalNode | None = None
-        self.clf_c1_id: int | None = None
-        self.clf_c2_id: int | None = None
-        self.clf_pairs: list[tuple[str, str]] = []
-        self.clf_pair_idx: int = 0
 
 
 dialog = DialogState()
