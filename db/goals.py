@@ -12,7 +12,12 @@ def get_goal_by_id(session: Session, goal_id: int) -> Goal | None:
 
 
 def get_all_goals(session: Session, scheme_id: int) -> list[Goal]:
-    return session.query(Goal).filter(Goal.scheme_id == scheme_id).all()
+    return (
+        session.query(Goal)
+        .filter(Goal.scheme_id == scheme_id)
+        .order_by(Goal.id)
+        .all()
+    )
 
 
 def list_classifiers(session: Session, scheme_id: int, level: int | None = None) -> list[Classifier]:
