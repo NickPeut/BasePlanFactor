@@ -103,8 +103,7 @@ def _handle_ask_root(text: str) -> DialogResponse:
         phase="adpacf",
         state="ask_add_subgoal",
         question=(
-            f"Добавить подцель для '{root.name}'? (да/нет)\n"
-            "Если дерево укрупнено достаточно — ответь 'нет' и перейдём к классификаторам."
+            f"Добавить подцель для '{root.name}'?\n"
         ),
         tree=serialize_tree(root),
     )
