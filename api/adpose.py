@@ -16,7 +16,7 @@ def calculate_ose(p: float, q: float) -> float:
     if p >= 1:
         return 0.0
     try:
-        return -q * math.log(1 - p)
+        return -q * math.log2(1 - p)
     except ValueError:
         return 0.0
 
