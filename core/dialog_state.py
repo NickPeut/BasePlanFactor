@@ -9,7 +9,8 @@ class DialogState:
 
         self.root = None
         self.current_node = None
-        self.max_level = 3
+        self.max_level = 15
+        self.max_cls = 4
 
         self.used_names = set()
         self.goal_by_name = {}

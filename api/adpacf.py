@@ -205,7 +205,15 @@ def _handle_clf_items(text: str) -> DialogResponse:
 
 def _handle_clf_more(text: str) -> DialogResponse:
     a = text.lower()
+
     if a == "да":
+        if len(dialog.clfs) >= dialog.max_cls:
+            dialog.state = "clf_more"
+            return _resp(
+                "clf_more",
+                "Можно ввести не более 4 классификаторов. Ответьте 'нет', чтобы продолжить."
+            )
+
         dialog.clf_level += 1
         dialog.state = "clf_name"
         return _resp("clf_name", "Введите название следующего классификатора:")
